@@ -1,11 +1,20 @@
-SRC_DIR=src
-BIN_DIR=bin
-OBJ_DIR=obj
-VENDOR_DIR=vendor
+CC := cc
+CFLAGS := -O2 -Wall -Wextra -Wpedantic
+LDFLAGS :=
+LDLIBS :=
 
-CFLAGS=-Iinclude -I$(VENDOR_DIR)/raylib/include -Wall -Wextra -O2
-LDFLAGS=-L$(VENDOR_DIR)/raylib/lib -lraylib 
+BINDIR := bin
+TOOLDIRS := cat head
 
-TARGET=$(BIN_DIR)/sorting-algos
+.PHONY: all clean
+all: $(addprefix $(BINDIR)/,$(TOOLDIRS))
 
-SRC=$(SRC_DIR)
+$(BINDIR):
+	mkdir -p $@
+
+$(BINDIR)/%: | $(BINDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $*/*.c $(LDLIBS) -o $@
+
+clean:
+	rm -rf $(BINDIR)
+

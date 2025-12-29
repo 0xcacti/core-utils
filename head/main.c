@@ -94,7 +94,7 @@ int head_file(const char *filename, size_t cc) {
   }
 
   if (!S_ISREG(st.st_mode)) {
-    int rc = stream_copy(fd, STDOUT_FILENO);
+    int rc = stream_copy(fd, STDOUT_FILENO, &cc);
     int stream_errno = 0;
     if (rc < 0) stream_errno = errno;
     int close_rc = close(fd);
@@ -111,6 +111,7 @@ int head_file(const char *filename, size_t cc) {
 
     return 0;
   }
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
