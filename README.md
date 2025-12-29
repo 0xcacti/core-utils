@@ -1,15 +1,20 @@
-### Misc Stuff Until Later 
+### Core Utils 
 
-This is a repo where I'm gonna hold random little snippets of code that I write in various languages 
-for play.  Like right now, I want to understand how C single threaded multiplexing with `select()` works, so
-I'm writing a simple echo server that uses `select()` to handle multiple clients at once without threads.
-It's not a big enough project to warrant its own repo, so it goes here. I guess I will also use it to learn how poll works. 
+This started out as a repo for a failed project in rust that I abandoned. 
+I don't like having a ton of stupid little failed repos in my github account 
+because it looks messy and makes me feel gross. For a while, I've been reusing
+old repos for new projects.  This repo stood as sort of a miscellaneous place 
+where I would throw up code that wasn't really in a serious project.  For 
+instance, I had a little implementation of malloc in here, and some 
+other random stuff.  
 
-I'm also going to use this to fill out my contributions chart when github doesn't show me as active because I don't have a 
-saml sso session (https://docs.github.com/en/account-and-profile/concepts/contributions-on-your-profile)
+Some of these random projects were re-implementations of some of the coreutils.
+Basically, all my other projects were a little bit too difficult and I was 
+feeling a little burnt out, so I decided to do something easy and implement 
+`cat` and `head`.  
 
-Eventually, as I do with many projects, I will completely yeet this and put in a real project
+When I went to repurpose this repo once again, I felt bad deleting the code 
+here.  As such, I decided that I would implement even more of the coreutils 
+and keep them here.  
 
-Actually, I want to do more programming with no goal.  Just playing. 
-When I play games there is no goal. I want to do the same here.  This 
-will be my repo for this. 
+
