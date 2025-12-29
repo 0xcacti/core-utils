@@ -76,7 +76,10 @@ static int stream_copy(int infd, int outfd, size_t *len) {
   return 0;
 }
 
-int head_file(const char *filename, size_t lc, size_t cc) {
+static int lc_to_cc(int infd, size_t lc, size_t *out_cc) {
+}
+
+int head_file(const char *filename, size_t cc) {
   int fd = open(filename, O_RDONLY);
   if (fd < 0) {
     return -1;
