@@ -17,4 +17,21 @@ When I went to repurpose this repo once again, I felt bad deleting the code
 here.  As such, I decided that I would implement even more of the coreutils 
 and keep them here.  
 
+### TODO
+
+- [x] cat
+- [ ] head
+- [ ] tail
+- [ ] echo
+- [ ] ls
+- [ ] pwd
+- [ ] rm
+- [ ] mv
+- [ ] cp
+- [ ] touch
+- [ ] mkdir
+- [ ] rmdir
+- [ ] more
+- [ ] less
+
 
