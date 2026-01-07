@@ -17,4 +17,3 @@ $(BINDIR)/%: | $(BINDIR)
 
 clean:
 	rm -rf $(BINDIR)
-
