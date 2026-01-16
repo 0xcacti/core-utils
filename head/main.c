@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 typedef enum { COUNT_OK, COUNT_INVALID, COUNT_RANGE } count_e;
+typedef enum { MODE_LINES, MODE_BYTES, MODE_DEFAULT } mode_e;
 
 static void usage() {
   dprintf(STDERR_FILENO, "Usage: head [-n lines | -c bytes] [file ...]\n");
@@ -55,7 +56,7 @@ static int write_all(int fd, const void *buf, size_t len) {
   return 0;
 }
 
-static int stream_copy(int infd, int outfd, size_t *len) {
+static int stream_copy(int infd, int outfd, mode_e m, size_t *c) {
   uint8_t buf[1008 * 64] = {0};
   size_t sum = 0;
   for (;;) {
@@ -76,10 +77,7 @@ static int stream_copy(int infd, int outfd, size_t *len) {
   return 0;
 }
 
-static int lc_to_cc(int infd, size_t lc, size_t *out_cc) {
-}
-
-int head_file(const char *filename, size_t cc) {
+int head_file(const char *filename, mode_e m, size_t c) {
   int fd = open(filename, O_RDONLY);
   if (fd < 0) {
     return -1;
@@ -94,7 +92,7 @@ int head_file(const char *filename, size_t cc) {
   }
 
   if (!S_ISREG(st.st_mode)) {
-    int rc = stream_copy(fd, STDOUT_FILENO, &cc);
+    int rc = stream_copy(fd, STDOUT_FILENO, m, &c);
     int stream_errno = 0;
     if (rc < 0) stream_errno = errno;
     int close_rc = close(fd);
@@ -143,15 +141,39 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  mode_e mode = MODE_DEFAULT;
   if (lc > 0 && cc > 0) {
     error_msg(argv[0], "can't combine line and byte counts");
     return 1;
+  } else if (lc > 0) {
+    mode = MODE_LINES;
+  } else if (cc > 0) {
+    mode = MODE_BYTES;
   }
 
   if (argc == optind) {
     size_t *bytes = cc > 0 ? &cc : NULL;
-    if (stream_copy(STDIN_FILENO, STDOUT_FILENO, bytes) < 0) {
+    if (stream_copy(STDIN_FILENO, STDOUT_FILENO, mode, bytes) < 0) {
       error_msg(argv[0], "stdin");
+      return 1;
+    }
+    return 0;
+  }
+
+  int exit_code = 0;
+  for (int i = optind; i < argc; i++) {
+    char *filename = argv[i];
+    if (mode == MODE_BYTES) {
+      if (head_file(filename, mode, cc) < 0) {
+        error_errno(argv[0], filename);
+        exit_code = 1;
+      }
+    } else if (mode == MODE_LINES) {
+      if (head_file(filename, mode, lc) < 0) {
+        error_errno(argv[0], filename);
+        exit_code = 1;
+      }
     }
   }
+  return exit_code;
 }
