@@ -12,8 +12,8 @@ all: $(addprefix $(BINDIR)/,$(TOOLDIRS))
 $(BINDIR):
 	mkdir -p $@
 
-$(BINDIR)/%: | $(BINDIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $*/*.c $(LDLIBS) -o $@
+$(BINDIR)/%: %/*.c | $(BINDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 clean:
 	rm -rf $(BINDIR)

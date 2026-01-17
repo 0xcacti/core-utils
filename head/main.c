@@ -22,7 +22,7 @@ typedef struct {
   } as;
 } count_t;
 
-static void usage() {
+static void usage(void) {
   dprintf(STDERR_FILENO, "Usage: head [-n lines | -c bytes] [file ...]\n");
 }
 
@@ -65,22 +65,49 @@ static int write_all(int fd, const void *buf, size_t len) {
 }
 
 static int stream_copy(int infd, int outfd, count_t count) {
-  uint8_t buf[1008 * 64] = {0};
+  uint8_t buf[1024 * 64] = {0};
   size_t sum = 0;
-  for (;;) {
-    if (sum == *len) break;
-    ssize_t n = read(infd, buf, sizeof(buf));
-    if (n < 0) {
-      if (errno == EINTR) continue;
-      return -1;
+  switch (count.mode) {
+  case MODE_DEFAULT:
+  case MODE_LINES: {
+    size_t lines_so_far = 0;
+    for (;;) {
+      if (lines_so_far >= count.as.lines) break;
+      ssize_t n = read(infd, buf, sizeof(buf));
+      if (n < 0) {
+        if (errno == EINTR) continue;
+        return -1;
+      }
+      if (n == 0) continue;
+      // look for newline
+      char *p = memchr(buf, '\n', n);
+      if (p != NULL) {
+        lines_so_far++;
+      }
+      sum += n;
+      if (write_all(outfd, buf, n) < 0) return -1;
     }
-    if (n == 0) continue;
-    sum += n;
-    if (len && sum > *len) {
-      n = sum - *len + 1;
-      sum = *len;
+    break;
+  }
+  case MODE_BYTES: {
+    size_t bytes_so_far = 0;
+    for (;;) {
+      if (bytes_so_far >= count.as.bytes) break;
+      ssize_t n = read(infd, buf, sizeof(buf));
+      if (n < 0) {
+        if (errno == EINTR) continue;
+        return -1;
+      }
+      if (n == 0) continue;
+      sum += n;
+      if (bytes_so_far > count.as.bytes) {
+        n = sum - count.as.bytes + 1;
+        sum = count.as.bytes;
+      }
+      if (write_all(outfd, buf, n) < 0) return -1;
     }
-    if (write_all(outfd, buf, n) < 0) return -1;
+    break;
+  }
   }
   return 0;
 }
@@ -100,7 +127,7 @@ int head_file(const char *filename, count_t c) {
   }
 
   if (!S_ISREG(st.st_mode)) {
-    int rc = stream_copy(fd, STDOUT_FILENO, m, &c);
+    int rc = stream_copy(fd, STDOUT_FILENO, c);
     int stream_errno = 0;
     if (rc < 0) stream_errno = errno;
     int close_rc = close(fd);
@@ -160,8 +187,10 @@ int main(int argc, char *argv[]) {
   } else if (cc > 0) {
     mode = MODE_BYTES;
     c.as.bytes = cc;
+  } else {
+    c.mode = mode;
+    c.as.lines = 10;
   }
-  c.mode = mode;
 
   if (argc == optind) {
     if (stream_copy(STDIN_FILENO, STDOUT_FILENO, c) < 0) {
