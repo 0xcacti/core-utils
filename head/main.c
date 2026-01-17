@@ -64,12 +64,27 @@ static int write_all(int fd, const void *buf, size_t len) {
   return 0;
 }
 
+static char *mode_to_string(mode_e mode) {
+  switch (mode) {
+  case MODE_DEFAULT:
+    return "default";
+  case MODE_LINES:
+    return "lines";
+  case MODE_BYTES:
+    return "bytes";
+  default:
+    return "unknown";
+  }
+}
+
 static int stream_copy(int infd, int outfd, count_t count) {
   uint8_t buf[1024 * 64] = {0};
   size_t sum = 0;
+  printf("Current mode: %s\n", mode_to_string(count.mode));
   switch (count.mode) {
   case MODE_DEFAULT:
   case MODE_LINES: {
+    printf("we have entered the wrong scenario\n");
     size_t lines_so_far = 0;
     for (;;) {
       if (lines_so_far >= count.as.lines) break;
@@ -90,6 +105,7 @@ static int stream_copy(int infd, int outfd, count_t count) {
     break;
   }
   case MODE_BYTES: {
+    printf("we have entered the right scenario\n");
     size_t bytes_so_far = 0;
     for (;;) {
       if (bytes_so_far >= count.as.bytes) break;
@@ -176,22 +192,23 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  mode_e mode = MODE_DEFAULT;
   count_t c = {0};
   if (lc > 0 && cc > 0) {
     error_msg(argv[0], "can't combine line and byte counts");
     return 1;
   } else if (lc > 0) {
-    mode = MODE_LINES;
+    c.mode = MODE_LINES;
     c.as.lines = lc;
   } else if (cc > 0) {
-    mode = MODE_BYTES;
+    printf("we are setting byte mode\n");
+    c.mode = MODE_BYTES;
     c.as.bytes = cc;
   } else {
-    c.mode = mode;
+    c.mode = MODE_DEFAULT;
     c.as.lines = 10;
   }
 
+  printf("mode: %s\n", mode_to_string(c.mode));
   if (argc == optind) {
     if (stream_copy(STDIN_FILENO, STDOUT_FILENO, c) < 0) {
       error_msg(argv[0], "stdin");
