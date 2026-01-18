@@ -64,27 +64,12 @@ static int write_all(int fd, const void *buf, size_t len) {
   return 0;
 }
 
-static char *mode_to_string(mode_e mode) {
-  switch (mode) {
-  case MODE_DEFAULT:
-    return "default";
-  case MODE_LINES:
-    return "lines";
-  case MODE_BYTES:
-    return "bytes";
-  default:
-    return "unknown";
-  }
-}
-
 static int stream_copy(int infd, int outfd, count_t count) {
   uint8_t buf[1024 * 64] = {0};
   size_t sum = 0;
-  printf("Current mode: %s\n", mode_to_string(count.mode));
   switch (count.mode) {
   case MODE_DEFAULT:
   case MODE_LINES: {
-    printf("we have entered the wrong scenario\n");
     size_t lines_so_far = 0;
     for (;;) {
       if (lines_so_far >= count.as.lines) break;
@@ -93,19 +78,26 @@ static int stream_copy(int infd, int outfd, count_t count) {
         if (errno == EINTR) continue;
         return -1;
       }
-      if (n == 0) continue;
-      // look for newline
-      char *p = memchr(buf, '\n', n);
-      if (p != NULL) {
+      if (n == 0) break;
+
+      char *buf_p = (char *)buf;
+      char *p = NULL;
+      size_t remaining = n;
+      while ((p = memchr(buf_p, '\n', remaining)) != NULL) {
+        if (lines_so_far >= count.as.lines) break;
+        size_t pos = (size_t)(p - buf_p) + 1;
+        if (write_all(outfd, buf_p, pos) < 0) return -1;
         lines_so_far++;
+        buf_p += pos;
+        remaining -= pos;
       }
-      sum += n;
-      if (write_all(outfd, buf, n) < 0) return -1;
+      if (lines_so_far < count.as.lines && remaining > 0) {
+        if (write_all(outfd, buf_p, remaining) < 0) return -1;
+      }
     }
     break;
   }
   case MODE_BYTES: {
-    printf("we have entered the right scenario\n");
     size_t bytes_so_far = 0;
     for (;;) {
       if (bytes_so_far >= count.as.bytes) break;
@@ -114,7 +106,7 @@ static int stream_copy(int infd, int outfd, count_t count) {
         if (errno == EINTR) continue;
         return -1;
       }
-      if (n == 0) continue;
+      if (n == 0) break;
       sum += n;
       if (bytes_so_far > count.as.bytes) {
         n = sum - count.as.bytes + 1;
@@ -200,7 +192,6 @@ int main(int argc, char *argv[]) {
     c.mode = MODE_LINES;
     c.as.lines = lc;
   } else if (cc > 0) {
-    printf("we are setting byte mode\n");
     c.mode = MODE_BYTES;
     c.as.bytes = cc;
   } else {
@@ -208,7 +199,6 @@ int main(int argc, char *argv[]) {
     c.as.lines = 10;
   }
 
-  printf("mode: %s\n", mode_to_string(c.mode));
   if (argc == optind) {
     if (stream_copy(STDIN_FILENO, STDOUT_FILENO, c) < 0) {
       error_msg(argv[0], "stdin");
