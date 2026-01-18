@@ -66,7 +66,6 @@ static int write_all(int fd, const void *buf, size_t len) {
 
 static int stream_copy(int infd, int outfd, count_t count) {
   uint8_t buf[1024 * 64] = {0};
-  size_t sum = 0;
   switch (count.mode) {
   case MODE_DEFAULT:
   case MODE_LINES: {
@@ -98,21 +97,40 @@ static int stream_copy(int infd, int outfd, count_t count) {
     break;
   }
   case MODE_BYTES: {
-    size_t bytes_so_far = 0;
-    for (;;) {
-      if (bytes_so_far >= count.as.bytes) break;
+    size_t need = count.as.bytes;
+    if (need == 0) break;
+    if (isatty(infd) != 0 && need <= sizeof(buf)) {
+      size_t have = 0;
+      while (have < need) {
+        ssize_t n = read(infd, buf + have, need - have);
+        if (n < 0) {
+          if (errno == EINTR) continue;
+          return -1;
+        }
+        if (n == 0) break;
+        have += (size_t)n;
+      }
+
+      if (have > 0) {
+        size_t to_write = have < need ? have : need;
+        if (write_all(outfd, buf, to_write) < 0) return -1;
+      }
+      break;
+    }
+
+    size_t left = count.as.bytes;
+    if (left == 0) break;
+    while (left > 0) {
       ssize_t n = read(infd, buf, sizeof(buf));
       if (n < 0) {
         if (errno == EINTR) continue;
         return -1;
       }
       if (n == 0) break;
-      sum += n;
-      if (bytes_so_far > count.as.bytes) {
-        n = sum - count.as.bytes + 1;
-        sum = count.as.bytes;
-      }
-      if (write_all(outfd, buf, n) < 0) return -1;
+      size_t to_write = (size_t)n;
+      if (to_write > left) to_write = left;
+      if (write_all(outfd, buf, to_write) < 0) return -1;
+      left -= to_write;
     }
     break;
   }
@@ -201,9 +219,19 @@ int head_file(const char *filename, count_t c) {
     break;
   }
   case MODE_BYTES: {
+    size_t to_write = c.as.bytes < sz ? c.as.bytes : sz;
+    if (write_all(STDOUT_FILENO, data, to_write) < 0) {
+      int saved = errno;
+      munmap(data, sz);
+      close(fd);
+      errno = saved;
+      return -1;
+    }
+    munmap(data, sz);
+    close(fd);
+    break;
   }
   }
-
   return 0;
 }
 
@@ -233,6 +261,7 @@ int main(int argc, char *argv[]) {
     }
     default:
       usage();
+      return 1;
     }
   }
 
