@@ -149,9 +149,61 @@ int head_file(const char *filename, count_t c) {
       errno = close_errno;
       return -1;
     }
-
     return 0;
   }
+
+  size_t sz = st.st_size;
+  if (sz == 0) {
+    close(fd);
+    return 0;
+  }
+
+  char *data = (char *)mmap(NULL, sz, PROT_READ, MAP_PRIVATE, fd, 0);
+  if (data == MAP_FAILED) {
+    int saved = errno;
+    close(fd);
+    errno = saved;
+    return -1;
+  }
+
+  switch (c.mode) {
+  case MODE_DEFAULT:
+  case MODE_LINES: {
+    size_t lines_so_far = 0;
+    char *data_p = data;
+    char *p = NULL;
+    size_t remaining = sz;
+    while ((p = memchr(data_p, '\n', remaining)) != NULL) {
+      if (lines_so_far >= c.as.lines) break;
+      size_t line_pos = (size_t)(p - data_p) + 1;
+      if (write_all(STDOUT_FILENO, data_p, line_pos) < 0) {
+        int saved = errno;
+        munmap(data, sz);
+        close(fd);
+        errno = saved;
+        return -1;
+      }
+      lines_so_far++;
+      data_p += line_pos;
+      remaining -= line_pos;
+    }
+    if (lines_so_far < c.as.lines && remaining > 0) {
+      if (write_all(STDOUT_FILENO, data_p, remaining) < 0) {
+        int saved = errno;
+        munmap(data, sz);
+        close(fd);
+        errno = saved;
+        return -1;
+      }
+    }
+    munmap(data, sz);
+    close(fd);
+    break;
+  }
+  case MODE_BYTES: {
+  }
+  }
+
   return 0;
 }
 
