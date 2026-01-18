@@ -4,7 +4,7 @@ LDFLAGS :=
 LDLIBS :=
 
 BINDIR := bin
-TOOLDIRS := cat head
+TOOLDIRS := cat head pwd
 
 .PHONY: all clean
 all: $(addprefix $(BINDIR)/,$(TOOLDIRS))
