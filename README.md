@@ -20,7 +20,7 @@ and keep them here.
 ### TODO
 
 - [x] cat
-- [ ] head
+- [x] head
 - [ ] tail
 - [ ] echo
 - [ ] ls
@@ -33,5 +33,3 @@ and keep them here.
 - [ ] rmdir
 - [ ] more
 - [ ] less
-
-### I will return to this later
