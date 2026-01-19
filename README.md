@@ -21,10 +21,10 @@ and keep them here.
 
 - [x] cat
 - [x] head
+- [ ] pwd
 - [ ] tail
 - [ ] echo
 - [ ] ls
-- [ ] pwd
 - [ ] rm
 - [ ] mv
 - [ ] cp
