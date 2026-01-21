@@ -16,6 +16,7 @@ int main(int argc, char *argv[]) {
 
   bool logical = true;
   bool physical = false;
+  // I don't know how to get logical
 
   while ((ch = getopt(argc, argv, "L:P:")) != -1) {
     switch (ch) {
