@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
   bool is_logical = true;
   // I don't know how to get logical
 
-  while ((ch = getopt(argc, argv, "L:P:")) != -1) {
+  while ((ch = getopt(argc, argv, "LP")) != -1) {
     switch (ch) {
     case 'L':
       is_logical = true;
@@ -47,6 +47,14 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     printf("%s\n", cwd);
+  } else {
+    char actual_cwd[PATH_MAX];
+    if (getcwd(actual_cwd, sizeof(actual_cwd)) == NULL) {
+      perror("getcwd");
+      return 1;
+    }
+    printf("%s\n", actual_cwd);
   }
+
   return 0;
 }
