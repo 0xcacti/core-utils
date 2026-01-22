@@ -21,7 +21,7 @@ and keep them here.
 
 - [x] cat
 - [x] head
-- [ ] pwd
+- [x] pwd
 - [ ] tail
 - [ ] echo
 - [ ] ls
