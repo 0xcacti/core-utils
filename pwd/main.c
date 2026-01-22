@@ -19,7 +19,6 @@ int main(int argc, char *argv[]) {
   int ch;
 
   bool is_logical = true;
-  // I don't know how to get logical
 
   while ((ch = getopt(argc, argv, "LP")) != -1) {
     switch (ch) {
