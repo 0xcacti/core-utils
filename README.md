@@ -22,8 +22,8 @@ and keep them here.
 - [x] cat
 - [x] head
 - [x] pwd
-- [ ] tail
 - [ ] echo
+- [ ] tail
 - [ ] ls
 - [ ] rm
 - [ ] mv

@@ -4,7 +4,7 @@ LDFLAGS :=
 LDLIBS :=
 
 BINDIR := bin
-TOOLDIRS := cat head pwd
+TOOLDIRS := cat head pwd echo
 
 .PHONY: all clean
 all: $(addprefix $(BINDIR)/,$(TOOLDIRS))
