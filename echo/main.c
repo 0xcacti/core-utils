@@ -5,17 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static void error_errno(const char *progname, const char *filename) {
-  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
-}
-
-static void error_msg(const char *progname, const char *msg) {
-  dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
-}
-
 int main(int argc, char *argv[]) {
-  const char *progname = argv[0];
-
   int suppress_newline = 0;
 
   int ch;
@@ -27,13 +17,31 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  char *output = argv[optind];
-  if (output == NULL) return 0;
-
-  if (suppress_newline) {
-    printf("%s", output);
-  } else {
-    printf("%s\n", output);
+  char *last = argv[optind];
+  if (last == NULL) {
+    if (!suppress_newline) printf("\n");
+    return 0;
   }
+
+  for (int i = optind; i < argc; i++) {
+    char *elem = argv[i];
+    if (i == argc - 1) {
+
+      size_t len = strlen(elem);
+      if (len >= 2 && elem[len - 2] == '\\' && elem[len - 1] == 'c') {
+        elem[len - 2] = '\0';
+        suppress_newline = 1;
+      }
+
+      if (suppress_newline) {
+        printf("%s", elem);
+      } else {
+        printf("%s\n", elem);
+      }
+    } else {
+      printf("%s ", elem);
+    }
+  }
+
   return 0;
 }
