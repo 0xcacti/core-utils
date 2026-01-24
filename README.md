@@ -22,7 +22,7 @@ and keep them here.
 - [x] cat
 - [x] head
 - [x] pwd
-- [ ] echo
+- [x] echo
 - [ ] tail
 - [ ] ls
 - [ ] rm
