@@ -23,12 +23,12 @@ and keep them here.
 - [x] head
 - [x] pwd
 - [x] echo
+- [ ] touch
+- [ ] rm
 - [ ] tail
 - [ ] ls
-- [ ] rm
 - [ ] mv
 - [ ] cp
-- [ ] touch
 - [ ] mkdir
 - [ ] rmdir
 - [ ] more
