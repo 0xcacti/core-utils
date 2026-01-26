@@ -23,6 +23,7 @@ and keep them here.
 - [x] head
 - [x] pwd
 - [x] echo
+- [x] yes
 - [ ] touch
 - [ ] rm
 - [ ] tail

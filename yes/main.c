@@ -1,13 +1,14 @@
+#include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
-  char *str = NULL;
-  if (argc < 2) {
-    str = "y";
-  } else {
-    str = argv[1];
-  }
+  const char *str = (argc < 2) ? "y" : argv[1];
+  signal(SIGPIPE, SIG_DFL);
   while (1) {
-    printf("%s\n", str);
+    if (puts(str) == EOF) {
+      if (ferror(stdout) && errno == EPIPE) return 0;
+      return 1;
+    }
   }
 }
