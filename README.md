@@ -24,12 +24,12 @@ and keep them here.
 - [x] pwd
 - [x] echo
 - [x] yes
+- [ ] mv
+- [ ] cp
 - [ ] touch
 - [ ] rm
 - [ ] tail
 - [ ] ls
-- [ ] mv
-- [ ] cp
 - [ ] mkdir
 - [ ] rmdir
 - [ ] more
