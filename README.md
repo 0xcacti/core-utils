@@ -24,9 +24,9 @@ and keep them here.
 - [x] pwd
 - [x] echo
 - [x] yes
+- [ ] touch
 - [ ] mv
 - [ ] cp
-- [ ] touch
 - [ ] rm
 - [ ] tail
 - [ ] ls
