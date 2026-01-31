@@ -68,18 +68,13 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    if (exists) {
-      // donkey
-    } else if (!exists && opt_c) {
-      // don't create
-    } else {
-      // create
+    if (!exists && opt_c) {
+      optind++;
+      continue;
     }
 
-    // if exists
-    // handle c
-    int s = open(argv[optind++], O_CREAT | O_WRONLY, 0666);
-    if (s == -1) {
+    int fd = open(path, O_CREAT | O_WRONLY, 0666);
+    if (fd == -1) {
       perror("open");
       return 1;
     }
