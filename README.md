@@ -17,6 +17,13 @@ When I went to repurpose this repo once again, I felt bad deleting the code
 here.  As such, I decided that I would implement even more of the coreutils 
 and keep them here.  
 
+All the core utils here are based on the MacOS / FreeBSD implementations
+because I wrote them on a mac and I could easily cross reference the behavior. 
+On the whole, I try my best to match the behavior of the original utils, 
+however, on some of the more annoying ones (like `touch`), I simplify down
+to just the basic functionality so that I learn how the util works without
+getting bogged down in all the edge cases.
+
 ### TODO
 
 - [x] cat

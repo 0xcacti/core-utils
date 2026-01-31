@@ -21,19 +21,26 @@ int main(int argc, char *argv[]) {
   while ((ch = getopt(argc, argv, "achmt:r:")) != -1) {
     switch (ch) {
     case 'a':
+      opt_a = true;
       break;
     case 'c':
+      opt_c = true;
       break;
     case 'h':
+      opt_h = true;
       break;
     case 'm':
+      opt_m = true;
       break;
     case 't':
+      t_str = optarg;
       break;
     case 'r':
+      r_path = optarg;
       break;
     default:
-      break;
+      usage(argv[0]);
+      return 1;
     }
   }
 }
