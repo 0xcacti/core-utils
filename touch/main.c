@@ -53,6 +53,12 @@ int main(int argc, char *argv[]) {
     opt_m = true;
   }
 
+  struct timespec timespecs[2];
+  timespecs[0] = {
+      .tv_sec = 0,
+      .tv_nsec = 0,
+  };
+
   while (optind != argc) {
     printf("Filename: %s\n", argv[optind]);
     char *path = argv[optind];
@@ -78,5 +84,7 @@ int main(int argc, char *argv[]) {
       perror("open");
       return 1;
     }
+
+    futimens(fd, timespecs);
   }
 }
