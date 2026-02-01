@@ -19,6 +19,11 @@ static void error_msg(const char *progname, const char *msg) {
   exit(2);
 }
 
+static void error_errno(const char *progname, const char *filename) {
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
+  exit(2);
+}
+
 int parse_time_t(char *s, struct timespec *ts) {
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
@@ -124,9 +129,7 @@ int main(int argc, char *argv[]) {
     case 'r': {
       r_path = optarg;
       int s = parse_time_r(r_path, timespecs);
-      if (s != 0) {
-        error_msg(argv[0], "No such file or directory");
-      }
+      if (s != 0) error_errno(argv[0], r_path);
       break;
     }
     default:
