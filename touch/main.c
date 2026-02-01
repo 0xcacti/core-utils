@@ -74,6 +74,7 @@ int parse_time_t(char *s, struct timespec *ts) {
   default:
     return -1;
   }
+  t->tm_isdst = -1;
   ts[0].tv_sec = mktime(t);
   ts[1].tv_sec = ts[0].tv_sec;
   if (ts[0].tv_sec == -1) {
@@ -100,7 +101,10 @@ int main(int argc, char *argv[]) {
   int ch;
   struct stat st;
   struct timespec timespecs[2];
-  bool opt_a, opt_c, opt_h, opt_m = false;
+  bool opt_a = false;
+  bool opt_c = false;
+  bool opt_h = false;
+  bool opt_m = false;
   char *t_str, *r_path = NULL;
 
   while ((ch = getopt(argc, argv, "achmt:r:")) != -1) {
@@ -147,20 +151,7 @@ int main(int argc, char *argv[]) {
     timespecs[1].tv_nsec = UTIME_OMIT;
   }
 
-  // access time
-  timespecs[0] = (struct timespec){
-      .tv_sec = 0,
-      .tv_nsec = 0,
-  };
-
-  // modification time
-  timespecs[1] = (struct timespec){
-      .tv_sec = 0,
-      .tv_nsec = 0,
-  };
-
   while (optind != argc) {
-    printf("Filename: %s\n", argv[optind]);
     char *path = argv[optind];
     bool exists = true;
     int ret = stat(path, &st);
@@ -168,8 +159,7 @@ int main(int argc, char *argv[]) {
       if (errno == ENOENT) {
         exists = false;
       } else {
-        perror("stat");
-        return 1;
+        error_errno(argv[0], path);
       }
     }
 
@@ -180,10 +170,15 @@ int main(int argc, char *argv[]) {
 
     int fd = open(path, O_CREAT | O_WRONLY, 0666);
     if (fd == -1) {
-      perror("open");
-      return 1;
+      error_errno(argv[0], path);
     }
 
-    futimens(fd, timespecs);
+    ret = futimens(fd, timespecs);
+    if (ret != 0) {
+      close(fd);
+      error_errno(argv[0], path);
+    }
+    close(fd);
+    optind++;
   }
 }
