@@ -97,6 +97,7 @@ int main(int argc, char *argv[]) {
       break;
     case 't':
       t_str = optarg;
+      parse_time(t_str, &timespecs[0]);
       break;
     case 'r':
       r_path = optarg;
@@ -114,6 +115,10 @@ int main(int argc, char *argv[]) {
   if (!opt_a && !opt_m) {
     opt_a = true;
     opt_m = true;
+  } else if (!opt_a) {
+    timespecs[0].tv_nsec = UTIME_OMIT;
+  } else if (!opt_m) {
+    timespecs[1].tv_nsec = UTIME_OMIT;
   }
 
   // access time
