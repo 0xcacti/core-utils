@@ -54,7 +54,15 @@ int main(int argc, char *argv[]) {
   }
 
   struct timespec timespecs[2];
-  timespecs[0] = {
+
+  // access time
+  timespecs[0] = (struct timespec){
+      .tv_sec = 0,
+      .tv_nsec = 0,
+  };
+
+  // modification time
+  timespecs[1] = (struct timespec){
       .tv_sec = 0,
       .tv_nsec = 0,
   };
