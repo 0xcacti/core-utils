@@ -1,18 +1,23 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void usage(const char *progname) {
-  dprintf(STDERR_FILENO, "Usage: %s [-ai] [file...]\n", progname);
-  exit(2);
+static void ignore_sigint(void) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = SIG_IGN;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGINT, &sa, NULL);
 }
 
-static void error_msg(const char *progname, const char *msg) {
-  dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
+static void usage(const char *progname) {
+  dprintf(STDERR_FILENO, "Usage: %s [-ai] [file...]\n", progname);
   exit(2);
 }
 
@@ -73,6 +78,10 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (opt_i) {
+    ignore_sigint();
+  }
+
   size_t files_specified = (size_t)(argc - optind);
   size_t outfd_count = files_specified + 1; // +1 for stdout
   int *outfds = malloc(sizeof(int) * outfd_count);
@@ -92,7 +101,8 @@ int main(int argc, char **argv) {
     outfds[i + 1] = fd;
   }
 
-  stream_copy(STDIN_FILENO, outfds, outfd_count);
+  int rc = stream_copy(STDIN_FILENO, outfds, outfd_count);
+  if (rc != 0) error_errno(argv[0], "read/write");
 
   for (size_t i = 0; i < files_specified; i++) {
     close(outfds[i + 1]);
