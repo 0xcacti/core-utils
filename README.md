@@ -31,7 +31,7 @@ getting bogged down in all the edge cases.
 - [x] pwd
 - [x] echo
 - [x] yes
-- [ ] touch
+- [x] touch
 - [ ] mv
 - [ ] cp
 - [ ] rm
@@ -39,5 +39,3 @@ getting bogged down in all the edge cases.
 - [ ] ls
 - [ ] mkdir
 - [ ] rmdir
-- [ ] more
-- [ ] less
