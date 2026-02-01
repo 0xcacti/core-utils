@@ -116,7 +116,10 @@ int main(int argc, char *argv[]) {
       break;
     case 't':
       t_str = optarg;
-      parse_time_t(t_str, timespecs);
+      int s = parse_time_t(t_str, timespecs);
+      if (s != 0)
+        error_msg(argv[0],
+                  "out of range or illegal time specification: [-t [[CC]YY]MMDDhhmm[.SS]]");
       break;
     case 'r':
       r_path = optarg;
