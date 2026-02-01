@@ -32,10 +32,11 @@ getting bogged down in all the edge cases.
 - [x] echo
 - [x] yes
 - [x] touch
+- [ ] tee
+- [ ] rm 
+- [ ] du
 - [ ] mv
 - [ ] cp
-- [ ] rm
 - [ ] tail
 - [ ] ls
-- [ ] mkdir
-- [ ] rmdir
+- [ ] xargs 
