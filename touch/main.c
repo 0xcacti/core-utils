@@ -69,8 +69,6 @@ int parse_time_t(char *s, struct timespec *ts) {
   default:
     return -1;
   }
-  printf("Parsed time: %04d-%02d-%02d %02d:%02d:%02d\n", t->tm_year + 1900, t->tm_mon + 1,
-         t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
   ts[0].tv_sec = mktime(t);
   ts[1].tv_sec = ts[0].tv_sec;
   if (ts[0].tv_sec == -1) {
@@ -114,17 +112,23 @@ int main(int argc, char *argv[]) {
     case 'm':
       opt_m = true;
       break;
-    case 't':
+    case 't': {
       t_str = optarg;
       int s = parse_time_t(t_str, timespecs);
-      if (s != 0)
+      if (s != 0) {
         error_msg(argv[0],
                   "out of range or illegal time specification: [-t [[CC]YY]MMDDhhmm[.SS]]");
+      }
       break;
-    case 'r':
+    }
+    case 'r': {
       r_path = optarg;
-      parse_time_r(r_path, timespecs);
+      int s = parse_time_r(r_path, timespecs);
+      if (s != 0) {
+        error_msg(argv[0], "No such file or directory");
+      }
       break;
+    }
     default:
       usage(argv[0]);
     }
