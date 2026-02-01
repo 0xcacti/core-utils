@@ -30,7 +30,6 @@
 //
 //      The rm utility removes symbolic links, not the files referenced by the links.
 //      It is an error to attempt to remove the files /, . or ...
-
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -61,6 +60,10 @@ static void usage() {
 static void error_msg(const char *progname, const char *msg) {
   dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
   exit(2);
+}
+
+static void resolve(const char *path) {
+  char *p;
 }
 
 int main(int argc, char *argv[]) {
