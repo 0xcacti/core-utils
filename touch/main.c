@@ -19,7 +19,7 @@ static void error_msg(const char *progname, const char *msg) {
   exit(2);
 }
 
-int parse_time(char *s, struct timespec *ts) {
+int parse_time_t(char *s, struct timespec *ts) {
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
   char *dot = strchr(s, '.');
@@ -71,6 +71,25 @@ int parse_time(char *s, struct timespec *ts) {
   }
   printf("Parsed time: %04d-%02d-%02d %02d:%02d:%02d\n", t->tm_year + 1900, t->tm_mon + 1,
          t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+  ts[0].tv_sec = mktime(t);
+  ts[1].tv_sec = ts[0].tv_sec;
+  if (ts[0].tv_sec == -1) {
+    return -1;
+  }
+  ts[0].tv_nsec = 0;
+  ts[1].tv_nsec = 0;
+  return 0;
+}
+
+int parse_time_r(char *ref_file, struct timespec *ts) {
+  struct stat st;
+  if (stat(ref_file, &st) != 0) {
+    return -1;
+  }
+  ts[0].tv_sec = st.st_atimespec.tv_sec;
+  ts[0].tv_nsec = 0;
+  ts[1].tv_sec = st.st_mtimespec.tv_sec;
+  ts[1].tv_nsec = 0;
   return 0;
 }
 
@@ -97,18 +116,15 @@ int main(int argc, char *argv[]) {
       break;
     case 't':
       t_str = optarg;
-      parse_time(t_str, &timespecs[0]);
+      parse_time_t(t_str, timespecs);
       break;
     case 'r':
       r_path = optarg;
+      parse_time_r(r_path, timespecs);
       break;
     default:
       usage(argv[0]);
     }
-  }
-
-  if (t_str != NULL) {
-    parse_time(t_str, &timespecs[0]);
   }
 
   // when not specified, default to -a and -m
