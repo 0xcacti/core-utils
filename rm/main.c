@@ -35,6 +35,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct flags {
   bool d_flag;
@@ -52,11 +53,14 @@ struct flags flags = {
     .v_flag = false,
 };
 
-//      rm [-f | -i] [-dIRrvWx] file ...
-//      unlink [--] file
 static void usage() {
   fprintf(stderr, "Usage: rm [-f | -i] [-drv] file ...\n");
   exit(EXIT_FAILURE);
+}
+
+static void error_msg(const char *progname, const char *msg) {
+  dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
+  exit(2);
 }
 
 int main(int argc, char *argv[]) {
@@ -85,4 +89,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (optind >= argc && !flags.f_flag) usage();
+
+  if (argv[optind][0] == '.' && argv[optind][1] == '\0') {
+    error_msg(argv[0], "\".\" and \"..\" may not be removed");
+  }
+  if (argv[optind][0] == '.' && argv[optind][1] == '.' && argv[optind][2] == '\0') {
+    error_msg(argv[0], "\".\" and \"..\" may not be removed");
+  }
 }
