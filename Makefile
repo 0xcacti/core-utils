@@ -1,5 +1,5 @@
 CC := cc
-CFLAGS := -O2 -Wall -Wextra -Wpedantic
+CFLAGS := -O2 -Wall -Wextra -Wpedantic -Werror
 LDFLAGS :=
 LDLIBS :=
 

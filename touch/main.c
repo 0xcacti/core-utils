@@ -27,10 +27,11 @@ static void error_errno(const char *progname, const char *filename) {
 int parse_time_t(char *s, struct timespec *ts) {
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
+  if (t == NULL) return -1;
   char *dot = strchr(s, '.');
 
   if (dot == NULL) {
-    ts->tv_sec = 0;
+    t->tm_sec = 0;
   } else {
     if (strlen(dot) != 3) {
       return -1;
@@ -101,6 +102,11 @@ int main(int argc, char *argv[]) {
   int ch;
   struct stat st;
   struct timespec timespecs[2];
+  timespecs[0].tv_sec = 0;
+  timespecs[1].tv_sec = 0;
+  timespecs[0].tv_nsec = UTIME_NOW;
+  timespecs[1].tv_nsec = UTIME_NOW;
+
   bool opt_a = false;
   bool opt_c = false;
   bool opt_h = false;
@@ -168,17 +174,23 @@ int main(int argc, char *argv[]) {
       continue;
     }
 
-    int fd = open(path, O_CREAT | O_WRONLY, 0666);
-    if (fd == -1) {
-      error_errno(argv[0], path);
+    if (!exists) {
+      int fd = open(path, O_CREAT | O_WRONLY, 0666);
+      if (fd == -1) {
+        error_errno(argv[0], path);
+      }
+      close(fd);
     }
 
-    ret = futimens(fd, timespecs);
+    if (opt_h) {
+      ret = utimensat(AT_FDCWD, path, timespecs, AT_SYMLINK_NOFOLLOW);
+    } else {
+      ret = utimensat(AT_FDCWD, path, timespecs, 0);
+    }
     if (ret != 0) {
-      close(fd);
       error_errno(argv[0], path);
     }
-    close(fd);
     optind++;
   }
+  return 0;
 }
