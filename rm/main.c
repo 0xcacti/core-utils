@@ -133,6 +133,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (optind >= argc && !flags.f_flag) usage(argv[0]);
+  int ret = 0;
 
   for (int i = optind; i < argc;) {
     invalid_e type;
@@ -147,9 +148,12 @@ int main(int argc, char *argv[]) {
       default:
         break;
       }
+      ret = 1;
       delete_argv_at(argv, &argc, i);
       continue;
     }
     i++;
   }
+
+  return ret;
 }
