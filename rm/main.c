@@ -68,7 +68,7 @@ static void error_msg(const char *progname, const char *msg) {
   exit(2);
 }
 
-bool static is_illegal(char *path, invalid_e *type) {
+static bool is_illegal(char *path, invalid_e *type) {
   char *p;
   struct stat sb;
   struct stat root;
@@ -99,6 +99,14 @@ bool static is_illegal(char *path, invalid_e *type) {
   return false;
 }
 
+static void delete_argv_at(char **argv, int *argc, int i) {
+  for (int j = i + 1; j < *argc; j++) {
+    argv[j - 1] = argv[j];
+  }
+  (*argc) -= 1;
+  argv[*argc] = NULL;
+}
+
 int main(int argc, char *argv[]) {
   int ch;
   while ((ch = getopt(argc, argv, "dfirv")) != -1) {
@@ -126,7 +134,7 @@ int main(int argc, char *argv[]) {
 
   if (optind >= argc && !flags.f_flag) usage(argv[0]);
 
-  for (int i = optind; i < argc; i++) {
+  for (int i = optind; i < argc;) {
     invalid_e type;
     if (is_illegal(argv[i], &type)) {
       switch (type) {
@@ -139,6 +147,9 @@ int main(int argc, char *argv[]) {
       default:
         break;
       }
+      delete_argv_at(argv, &argc, i);
+      continue;
     }
+    i++;
   }
 }
