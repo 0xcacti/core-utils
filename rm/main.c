@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 struct flags {
   bool d_flag;
@@ -52,8 +53,8 @@ struct flags flags = {
     .v_flag = false,
 };
 
-static void usage() {
-  fprintf(stderr, "Usage: rm [-f | -i] [-drv] file ...\n");
+static void usage(const char *progname) {
+  fprintf(stderr, "Usage: %s [-f | -i] [-drv] file ...\n", progname);
   exit(EXIT_FAILURE);
 }
 
@@ -62,8 +63,28 @@ static void error_msg(const char *progname, const char *msg) {
   exit(2);
 }
 
-static void resolve(const char *path) {
+bool static is_illegal(const char *path) {
   char *p;
+  struct stat sb;
+  struct stat root;
+  stat("/", &root);
+  if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino && root.st_dev == sb.st_dev) {
+    return true;
+  }
+  p = strrchr(path, '\0');
+  while (--p > path && *p == '/') *p = '\0';
+
+  // go to after last '/'
+  if ((p = strrchr(path, '/')) != NULL) {
+    p = p + 1;
+  } else {
+    p = (char *)path;
+  }
+
+  if (p[0] == '.' && p[1] == '\0') return true;
+  if (p[0] == '.' && p[1] == '.' && p[2] == '\0') return true;
+
+  return false;
 }
 
 int main(int argc, char *argv[]) {
@@ -93,10 +114,9 @@ int main(int argc, char *argv[]) {
 
   if (optind >= argc && !flags.f_flag) usage();
 
-  if (argv[optind][0] == '.' && argv[optind][1] == '\0') {
-    error_msg(argv[0], "\".\" and \"..\" may not be removed");
-  }
-  if (argv[optind][0] == '.' && argv[optind][1] == '.' && argv[optind][2] == '\0') {
-    error_msg(argv[0], "\".\" and \"..\" may not be removed");
+  for (int i = optind; i < argc; i++) {
+    if (is_illegal(argv[i])) {
+      error_msg(argv[0], "refusing to remove '/', '.', or '..'");
+    }
   }
 }
