@@ -43,7 +43,7 @@ struct flags {
   bool i_flag;
   bool r_flag;
   bool v_flag;
-} flags;
+};
 
 struct flags flags = {
     .d_flag = false,
@@ -52,6 +52,11 @@ struct flags flags = {
     .r_flag = false,
     .v_flag = false,
 };
+
+typedef enum INVALID {
+  ROOT_DIR,
+  DOTS,
+} invalid_e;
 
 static void usage(const char *progname) {
   fprintf(stderr, "Usage: %s [-f | -i] [-drv] file ...\n", progname);
@@ -63,12 +68,13 @@ static void error_msg(const char *progname, const char *msg) {
   exit(2);
 }
 
-bool static is_illegal(const char *path) {
+bool static is_illegal(char *path, invalid_e *type) {
   char *p;
   struct stat sb;
   struct stat root;
-  stat("/", &root);
+  if (stat("/", &root) != 0) return false;
   if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino && root.st_dev == sb.st_dev) {
+    *type = ROOT_DIR;
     return true;
   }
   p = strrchr(path, '\0');
@@ -81,8 +87,14 @@ bool static is_illegal(const char *path) {
     p = (char *)path;
   }
 
-  if (p[0] == '.' && p[1] == '\0') return true;
-  if (p[0] == '.' && p[1] == '.' && p[2] == '\0') return true;
+  if (p[0] == '.' && p[1] == '\0') {
+    *type = DOTS;
+    return true;
+  }
+  if (p[0] == '.' && p[1] == '.' && p[2] == '\0') {
+    *type = DOTS;
+    return true;
+  }
 
   return false;
 }
@@ -107,16 +119,26 @@ int main(int argc, char *argv[]) {
       flags.v_flag = true;
       break;
     default:
-      usage();
+      usage(argv[0]);
       break;
     }
   }
 
-  if (optind >= argc && !flags.f_flag) usage();
+  if (optind >= argc && !flags.f_flag) usage(argv[0]);
 
   for (int i = optind; i < argc; i++) {
-    if (is_illegal(argv[i])) {
-      error_msg(argv[0], "refusing to remove '/', '.', or '..'");
+    invalid_e type;
+    if (is_illegal(argv[i], &type)) {
+      switch (type) {
+      case ROOT_DIR:
+        fprintf(stderr, "%s: \"/\" may not be removed\n", argv[0]);
+        break;
+      case DOTS:
+        fprintf(stderr, "%s: \".\" or \"..\" may not be removed\n", argv[0]);
+        break;
+      default:
+        break;
+      }
     }
   }
 }
