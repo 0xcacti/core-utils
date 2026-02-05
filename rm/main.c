@@ -30,12 +30,14 @@
 //
 //      The rm utility removes symbolic links, not the files referenced by the links.
 //      It is an error to attempt to remove the files /, . or ...
+#include <errno.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 struct flags {
   bool d_flag;
@@ -45,6 +47,16 @@ struct flags {
   bool v_flag;
 };
 
+typedef enum {
+  ROOT_DIR,
+  DOTS,
+} invalid_e;
+
+typedef enum {
+  RM_SUCCESS,
+  RM_FAILURE,
+} rm_result_e;
+
 struct flags flags = {
     .d_flag = false,
     .f_flag = false,
@@ -53,10 +65,7 @@ struct flags flags = {
     .v_flag = false,
 };
 
-typedef enum INVALID {
-  ROOT_DIR,
-  DOTS,
-} invalid_e;
+static bool is_term = false;
 
 static void usage(const char *progname) {
   fprintf(stderr, "Usage: %s [-f | -i] [-drv] file ...\n", progname);
@@ -72,6 +81,7 @@ static bool is_illegal(char *path, invalid_e *type) {
   char *p;
   struct stat sb;
   struct stat root;
+  if (type == NULL) exit(1);
   if (stat("/", &root) != 0) return false;
   if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino && root.st_dev == sb.st_dev) {
     *type = ROOT_DIR;
@@ -107,6 +117,17 @@ static void delete_argv_at(char **argv, int *argc, int i) {
   argv[*argc] = NULL;
 }
 
+void rm_file(const char *path, rm_result_e *result) {
+  if (result == NULL) exit(1);
+  struct stat st;
+  int ret = 0;
+  if (lstat(path, &st) != 0) {
+    if (!flags.f_flag || errno != ENOENT) {
+      *result = RM_FAILURE;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   int ch;
   while ((ch = getopt(argc, argv, "dfirv")) != -1) {
@@ -140,10 +161,10 @@ int main(int argc, char *argv[]) {
     if (is_illegal(argv[i], &type)) {
       switch (type) {
       case ROOT_DIR:
-        fprintf(stderr, "%s: \"/\" may not be removed\n", argv[0]);
+        error_msg(argv[0], "\"/\" may not be removed");
         break;
       case DOTS:
-        fprintf(stderr, "%s: \".\" or \"..\" may not be removed\n", argv[0]);
+        error_msg(argv[0], "\".\" or \"..\" may not be removed");
         break;
       default:
         break;
@@ -153,6 +174,20 @@ int main(int argc, char *argv[]) {
       continue;
     }
     i++;
+  }
+
+  if (!argv[optind]) return ret;
+  is_term = isatty(STDIN_FILENO);
+
+  for (int i = optind; i < argc; i++) {
+    rm_result_e result = RM_SUCCESS;
+    if (flags.r_flag) {
+    } else {
+      rm_file(argv[i], &result);
+      if (result == RM_FAILURE) {
+        ret = 1;
+      }
+    }
   }
 
   return ret;
