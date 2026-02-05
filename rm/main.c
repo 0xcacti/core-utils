@@ -53,8 +53,9 @@ typedef enum {
 } invalid_e;
 
 typedef enum {
-  RM_SUCCESS,
-  RM_FAILURE,
+  SUCCESS,
+  UNLINK_FAIL,
+  DIR_FAIL,
 } rm_result_e;
 
 struct flags flags = {
@@ -120,11 +121,15 @@ static void delete_argv_at(char **argv, int *argc, int i) {
 void rm_file(const char *path, rm_result_e *result) {
   if (result == NULL) exit(1);
   struct stat st;
-  int ret = 0;
   if (lstat(path, &st) != 0) {
     if (!flags.f_flag || errno != ENOENT) {
-      *result = RM_FAILURE;
+      *result = UNLINK_FAIL;
     }
+  }
+
+  if (S_ISDIR(st.st_mode) && !flags.d_flag) {
+    *result = DIR_FAIL;
+    return;
   }
 }
 
@@ -161,10 +166,10 @@ int main(int argc, char *argv[]) {
     if (is_illegal(argv[i], &type)) {
       switch (type) {
       case ROOT_DIR:
-        error_msg(argv[0], "\"/\" may not be removed");
+        fprintf(stderr, "%s: \"/\" may not be removed\n", argv[0]);
         break;
       case DOTS:
-        error_msg(argv[0], "\".\" or \"..\" may not be removed");
+        fprintf(stderr, "%s: \".\" or \"..\" may not be removed\n", argv[0]);
         break;
       default:
         break;
@@ -180,12 +185,18 @@ int main(int argc, char *argv[]) {
   is_term = isatty(STDIN_FILENO);
 
   for (int i = optind; i < argc; i++) {
-    rm_result_e result = RM_SUCCESS;
+    rm_result_e result = SUCCESS;
     if (flags.r_flag) {
     } else {
       rm_file(argv[i], &result);
-      if (result == RM_FAILURE) {
+      if (result == UNLINK_FAIL) {
         ret = 1;
+        fprintf(stderr, "%s\n", argv[i]);
+        continue;
+      } else if (result == DIR_FAIL) {
+        ret = 1;
+        fprintf(stderr, "%s: is a directory\n", argv[i]);
+        continue;
       }
     }
   }
