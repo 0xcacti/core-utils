@@ -52,14 +52,18 @@ static bool is_illegal(char *path, invalid_e *type) {
   char *p;
   struct stat sb;
   struct stat root;
-  if (type == NULL) exit(1);
-  if (stat("/", &root) != 0) return false;
-  if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino && root.st_dev == sb.st_dev) {
+  if (type == NULL)
+    exit(1);
+  if (stat("/", &root) != 0)
+    return false;
+  if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino &&
+      root.st_dev == sb.st_dev) {
     *type = ROOT_DIR;
     return true;
   }
   p = strrchr(path, '\0');
-  while (--p > path && *p == '/') *p = '\0';
+  while (--p > path && *p == '/')
+    *p = '\0';
 
   // go to after last '/'
   if ((p = strrchr(path, '/')) != NULL) {
@@ -95,20 +99,25 @@ int check(char *path, char *name, struct stat *st) {
   if (flags.i_flag)
     fprintf(stderr, "remove %s? ", path);
   else {
-    if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) || errno != EACCES) return 1;
+    if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) ||
+        errno != EACCES)
+      return 1;
     strmode(st->st_mode, modep);
-    fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1, modep[9] == ' ' ? "" : " ",
-            user_from_uid(st->st_uid, 0), group_from_gid(st->st_gid, 0), path);
+    fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1,
+            modep[9] == ' ' ? "" : " ", user_from_uid(st->st_uid, 0),
+            group_from_gid(st->st_gid, 0), path);
   }
   (void)fflush(stderr);
 
   first = ch = getchar();
-  while (ch != '\n' && ch != EOF) ch = getchar();
+  while (ch != '\n' && ch != EOF)
+    ch = getchar();
   return (first == 'y' || first == 'Y');
 }
 
 void rm_file(const char *path, rm_result_e *result) {
-  if (result == NULL) exit(1);
+  if (result == NULL)
+    exit(1);
   struct stat st;
   if (lstat(path, &st) != 0) {
     if (!flags.f_flag || errno != ENOENT) {
@@ -147,7 +156,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (optind >= argc && !flags.f_flag) usage(argv[0]);
+  if (optind >= argc && !flags.f_flag)
+    usage(argv[0]);
   int ret = 0;
 
   for (int i = optind; i < argc;) {
@@ -170,7 +180,8 @@ int main(int argc, char *argv[]) {
     i++;
   }
 
-  if (!argv[optind]) return ret;
+  if (!argv[optind])
+    return ret;
   is_term = isatty(STDIN_FILENO);
 
   for (int i = optind; i < argc; i++) {
