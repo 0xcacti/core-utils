@@ -95,16 +95,10 @@ int check(char *path, char *name, struct stat *st) {
   if (flags.i_flag)
     fprintf(stderr, "remove %s? ", path);
   else {
-    /*
-     * If it's not a symbolic link and it's unwritable and we're
-     * talking to a terminal, ask.  Symbolic links are excluded
-     * because their permissions are meaningless.  Check stdin_ok
-     * first because we may not have stat'ed the file.
-     */
-    if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) || errno != EACCES) return (1);
+    if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) || errno != EACCES) return 1;
     strmode(st->st_mode, modep);
-    (void)fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1, modep[9] == ' ' ? "" : " ",
-                  user_from_uid(sp->st_uid, 0), group_from_gid(sp->st_gid, 0), path);
+    fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1, modep[9] == ' ' ? "" : " ",
+            user_from_uid(st->st_uid, 0), group_from_gid(st->st_gid, 0), path);
   }
   (void)fflush(stderr);
 
