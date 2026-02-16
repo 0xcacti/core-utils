@@ -1,5 +1,7 @@
 #include <errno.h>
 #include <getopt.h>
+#include <grp.h>
+#include <pwd.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,86 +88,29 @@ static void delete_argv_at(char **argv, int *argc, int i) {
   argv[*argc] = NULL;
 }
 
-// int check(char *path, char *name, struct stat *st) {
-//   int ch, first;
-//   char modep[15];
-//
-//   if (flags.i_flag)
-//     fprintf(stderr, "remove %s? ", path);
-//   else {
-//     /*
-//      * If it's not a symbolic link and it's unwritable and we're
-//      * talking to a terminal, ask.  Symbolic links are excluded
-//      * because their permissions are meaningless.  Check stdin_ok
-//      * first because we may not have stat'ed the file.
-//      */
-//     if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) || errno != EACCES) return (1);
-//     strmode(st->st_mode, modep);
-//     (void)fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1, modep[9] == ' ' ? "" : " ",
-//                   user_from_uid(sp->st_uid, 0), group_from_gid(sp->st_gid, 0), path);
-//   }
-//   (void)fflush(stderr);
-//
-//   first = ch = getchar();
-//   while (ch != '\n' && ch != EOF) ch = getchar();
-//   return (first == 'y' || first == 'Y');
-// }
+int check(char *path, char *name, struct stat *st) {
+  int ch, first;
+  char modep[15];
 
-// const char *user_from_uid(uid_t uid, int noname)
-// {
-// 	struct passwd pwstore, *pw = NULL;
-// 	char pwbuf[_PW_BUF_LEN];
-// 	UIDC **pptr, *ptr = NULL;
-//
-// 	if ((uidtb != NULL) || (uidtb_start() == 0)) {
-// 		/*
-// 		 * see if we have this uid cached
-// 		 */
-// 		pptr = uidtb + (uid % UID_SZ);
-// 		ptr = *pptr;
-//
-// 		if ((ptr != NULL) && (ptr->valid > 0) && (ptr->uid == uid)) {
-// 			/*
-// 			 * have an entry for this uid
-// 			 */
-// 			if (!noname || (ptr->valid == VALID))
-// 				return ptr->name;
-// 			return NULL;
-// 		}
-//
-// 		if (ptr == NULL)
-// 			*pptr = ptr = malloc(sizeof(UIDC));
-// 	}
-//
-// 	getpwuid_r(uid, &pwstore, pwbuf, sizeof(pwbuf), &pw);
-// 	if (pw == NULL) {
-// 		/*
-// 		 * no match for this uid in the local password file
-// 		 * a string that is the uid in numeric format
-// 		 */
-// 		if (ptr == NULL)
-// 			return NULL;
-// 		ptr->uid = uid;
-// 		(void)snprintf(ptr->name, UNMLEN, "%u", uid);
-// 		ptr->valid = INVALID;
-// 		if (noname)
-// 			return NULL;
-// 	} else {
-// 		/*
-// 		 * there is an entry for this uid in the password file
-// 		 */
-// 		if (ptr == NULL)
-// 			return pw->pw_name;
-// 		ptr->uid = uid;
-// 		(void)strlcpy(ptr->name, pw->pw_name, sizeof(ptr->name));
-// 		ptr->valid = VALID;
-// 	}
-// 	return ptr->name;
-// }
+  if (flags.i_flag)
+    fprintf(stderr, "remove %s? ", path);
+  else {
+    /*
+     * If it's not a symbolic link and it's unwritable and we're
+     * talking to a terminal, ask.  Symbolic links are excluded
+     * because their permissions are meaningless.  Check stdin_ok
+     * first because we may not have stat'ed the file.
+     */
+    if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) || errno != EACCES) return (1);
+    strmode(st->st_mode, modep);
+    (void)fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1, modep[9] == ' ' ? "" : " ",
+                  user_from_uid(sp->st_uid, 0), group_from_gid(sp->st_gid, 0), path);
+  }
+  (void)fflush(stderr);
 
-char *get_user(uid_t uid) {
-  struct passwd *pws = NULL;
-  struct passwd *pw;
+  first = ch = getchar();
+  while (ch != '\n' && ch != EOF) ch = getchar();
+  return (first == 'y' || first == 'Y');
 }
 
 void rm_file(const char *path, rm_result_e *result) {
