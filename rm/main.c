@@ -23,7 +23,8 @@ typedef enum {
 } invalid_e;
 
 typedef enum {
-  SUCCESS,
+  OK,
+  OK_V,
   UNLINK_FAIL,
   DIR_FAIL,
 } rm_result_e;
@@ -52,18 +53,14 @@ static bool is_illegal(char *path, invalid_e *type) {
   char *p;
   struct stat sb;
   struct stat root;
-  if (type == NULL)
-    exit(1);
-  if (stat("/", &root) != 0)
-    return false;
-  if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino &&
-      root.st_dev == sb.st_dev) {
+  if (type == NULL) exit(1);
+  if (stat("/", &root) != 0) return false;
+  if (lstat(path, &sb) == 0 && root.st_ino == sb.st_ino && root.st_dev == sb.st_dev) {
     *type = ROOT_DIR;
     return true;
   }
   p = strrchr(path, '\0');
-  while (--p > path && *p == '/')
-    *p = '\0';
+  while (--p > path && *p == '/') *p = '\0';
 
   // go to after last '/'
   if ((p = strrchr(path, '/')) != NULL) {
@@ -99,35 +96,62 @@ int check(char *path, char *name, struct stat *st) {
   if (flags.i_flag)
     fprintf(stderr, "remove %s? ", path);
   else {
-    if (!is_term || S_ISLNK(st->st_mode) || !access(name, W_OK) ||
-        errno != EACCES)
-      return 1;
+    if (!is_term || S_ISLNK(st->st_mode)) return 1;
+    errno = 0;
+    if (access(name, W_OK) == 0) return 1;
+    if (errno != EACCES) return 1;
     strmode(st->st_mode, modep);
-    fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1,
-            modep[9] == ' ' ? "" : " ", user_from_uid(st->st_uid, 0),
-            group_from_gid(st->st_gid, 0), path);
+    fprintf(stderr, "override %s%s%s/%s for %s? ", modep + 1, modep[9] == ' ' ? "" : " ",
+            user_from_uid(st->st_uid, 0), group_from_gid(st->st_gid, 0), path);
   }
   (void)fflush(stderr);
 
   first = ch = getchar();
-  while (ch != '\n' && ch != EOF)
-    ch = getchar();
+  while (ch != '\n' && ch != EOF) ch = getchar();
   return (first == 'y' || first == 'Y');
 }
 
-void rm_file(const char *path, rm_result_e *result) {
-  if (result == NULL)
-    exit(1);
-  struct stat st;
+void rm_file(char *path, rm_result_e *result) {
+  if (result == NULL) exit(1);
+  struct stat st = {0};
   if (lstat(path, &st) != 0) {
     if (!flags.f_flag || errno != ENOENT) {
       *result = UNLINK_FAIL;
+      return;
     }
+    *result = OK;
+    return;
   }
 
   if (S_ISDIR(st.st_mode) && !flags.d_flag) {
     *result = DIR_FAIL;
     return;
+  }
+
+  if (!flags.f_flag && !check(path, path, &st)) {
+    *result = OK;
+    return;
+  }
+
+  int r = 0;
+  if (S_ISDIR(st.st_mode)) {
+    r = rmdir(path);
+  } else {
+    r = unlink(path);
+  }
+  if (r != 0) {
+    if (!flags.f_flag || errno != ENOENT) {
+      *result = UNLINK_FAIL;
+      return;
+    }
+    *result = OK;
+    return;
+  }
+
+  if (flags.v_flag) {
+    *result = OK_V;
+  } else {
+    *result = OK;
   }
 }
 
@@ -156,8 +180,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (optind >= argc && !flags.f_flag)
-    usage(argv[0]);
+  if (optind >= argc && !flags.f_flag) usage(argv[0]);
+
+  if (flags.f_flag && flags.i_flag) flags.i_flag = false;
+
   int ret = 0;
 
   for (int i = optind; i < argc;) {
@@ -180,22 +206,28 @@ int main(int argc, char *argv[]) {
     i++;
   }
 
-  if (!argv[optind])
-    return ret;
+  if (!argv[optind]) return ret;
   is_term = isatty(STDIN_FILENO);
 
   for (int i = optind; i < argc; i++) {
-    rm_result_e result = SUCCESS;
+    rm_result_e result = OK;
     if (flags.r_flag) {
     } else {
       rm_file(argv[i], &result);
-      if (result == UNLINK_FAIL) {
+      switch (result) {
+      case UNLINK_FAIL:
         ret = 1;
-        fprintf(stderr, "%s\n", argv[i]);
+        fprintf(stderr, "%s: %s: %s\n", argv[0], argv[i], strerror(errno));
         continue;
-      } else if (result == DIR_FAIL) {
+      case DIR_FAIL:
         ret = 1;
-        fprintf(stderr, "%s: is a directory\n", argv[i]);
+        fprintf(stderr, "%s: %s: is a directory\n", argv[0], argv[i]);
+        continue;
+      case OK_V:
+        fprintf(stdout, "%s\n", argv[i]);
+        continue;
+      case OK:
+      default:
         continue;
       }
     }
