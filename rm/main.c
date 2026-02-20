@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fts.h>
 #include <getopt.h>
 #include <grp.h>
 #include <pwd.h>
@@ -7,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 struct flags {
@@ -38,6 +40,7 @@ struct flags flags = {
 };
 
 static bool is_term = false;
+static int rm_errno = 0;
 
 static void usage(const char *progname) {
   fprintf(stderr, "Usage: %s [-f | -i] [-drv] file ...\n", progname);
@@ -116,6 +119,7 @@ void rm_file(char *path, rm_result_e *result) {
   struct stat st = {0};
   if (lstat(path, &st) != 0) {
     if (!flags.f_flag || errno != ENOENT) {
+      rm_errno = errno;
       *result = UNLINK_FAIL;
       return;
     }
@@ -124,11 +128,13 @@ void rm_file(char *path, rm_result_e *result) {
   }
 
   if (S_ISDIR(st.st_mode) && !flags.d_flag) {
+    rm_errno = errno;
     *result = DIR_FAIL;
     return;
   }
 
   if (!flags.f_flag && !check(path, path, &st)) {
+    rm_errno = errno;
     *result = OK;
     return;
   }
@@ -141,6 +147,7 @@ void rm_file(char *path, rm_result_e *result) {
   }
   if (r != 0) {
     if (!flags.f_flag || errno != ENOENT) {
+      rm_errno = errno;
       *result = UNLINK_FAIL;
       return;
     }
@@ -153,6 +160,37 @@ void rm_file(char *path, rm_result_e *result) {
   } else {
     *result = OK;
   }
+}
+
+void rm_tree(char *path, rm_result_e *result) {
+  FTS *fts = NULL;
+  FTSENT *p = NULL;
+  bool needstat = !flags.f_flag && !flags.i_flag && is_term;
+  int fts_flags = FTS_PHYSICAL;
+  enum { SKIPPED = 1 };
+  if (!needstat) fts_flags |= FTS_NOSTAT;
+  char *paths[2];
+  paths[0] = path;
+  paths[1] = NULL;
+
+  fts = fts_open(paths, fts_flags, NULL);
+  if (fts == NULL) {
+    *result = UNLINK_FAIL;
+    return;
+  }
+
+  while ((p = fts_read(fts)) != NULL) {
+    (void)p;
+    break;
+  }
+
+  if (errno != 0) {
+    *result = UNLINK_FAIL;
+  } else {
+    *result = OK;
+  }
+
+  fts_close(fts);
 }
 
 int main(int argc, char *argv[]) {
@@ -212,12 +250,13 @@ int main(int argc, char *argv[]) {
   for (int i = optind; i < argc; i++) {
     rm_result_e result = OK;
     if (flags.r_flag) {
+      rm_tree(argv[i], &result);
     } else {
       rm_file(argv[i], &result);
       switch (result) {
       case UNLINK_FAIL:
         ret = 1;
-        fprintf(stderr, "%s: %s: %s\n", argv[0], argv[i], strerror(errno));
+        fprintf(stderr, "%s: %s: %s\n", argv[0], argv[i], strerror(rm_errno));
         continue;
       case DIR_FAIL:
         ret = 1;
