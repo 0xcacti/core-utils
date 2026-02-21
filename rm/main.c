@@ -176,6 +176,7 @@ void rm_tree(char *path, rm_result_e *result, char *progname) {
 
   enum { SKIPPED = 1 };
   FTSENT *p = NULL;
+  errno = 0;
   while ((p = fts_read(fts)) != NULL) {
     switch (p->fts_info) {
     case FTS_DNR: {
