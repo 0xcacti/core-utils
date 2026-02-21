@@ -29,6 +29,7 @@ typedef enum {
   OK_V,
   UNLINK_FAIL,
   DIR_FAIL,
+  FAIL,
 } rm_result_e;
 
 struct flags flags = {
@@ -45,11 +46,6 @@ static int rm_errno = 0;
 static void usage(const char *progname) {
   fprintf(stderr, "Usage: %s [-f | -i] [-drv] file ...\n", progname);
   exit(EXIT_FAILURE);
-}
-
-static void error_msg(const char *progname, const char *msg) {
-  dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
-  exit(2);
 }
 
 static bool is_illegal(char *path, invalid_e *type) {
@@ -162,34 +158,92 @@ void rm_file(char *path, rm_result_e *result) {
   }
 }
 
-void rm_tree(char *path, rm_result_e *result) {
-  FTS *fts = NULL;
-  FTSENT *p = NULL;
+void rm_tree(char *path, rm_result_e *result, char *progname) {
   bool needstat = !flags.f_flag && !flags.i_flag && is_term;
   int fts_flags = FTS_PHYSICAL;
-  enum { SKIPPED = 1 };
   if (!needstat) fts_flags |= FTS_NOSTAT;
+
   char *paths[2];
   paths[0] = path;
   paths[1] = NULL;
 
-  fts = fts_open(paths, fts_flags, NULL);
+  FTS *fts = fts_open(paths, fts_flags, NULL);
   if (fts == NULL) {
+    rm_errno = errno;
     *result = UNLINK_FAIL;
+    fprintf(stderr, "%s: %s: %s\n", progname, path, strerror(errno));
     return;
   }
 
+  enum { SKIPPED = 1 };
+  FTSENT *p = NULL;
   while ((p = fts_read(fts)) != NULL) {
-    (void)p;
-    break;
+    switch (p->fts_info) {
+    case FTS_DNR: {
+      if (!flags.f_flag || p->fts_errno != ENOENT) {
+        *result = UNLINK_FAIL;
+        fprintf(stderr, "%s: %s: %s\n", progname, p->fts_path, strerror(p->fts_errno));
+      }
+      continue;
+    }
+
+    case FTS_ERR: {
+      *result = FAIL;
+      fprintf(stderr, "%s: %s: %s\n", progname, p->fts_path, strerror(p->fts_errno));
+      fts_close(fts);
+      return;
+    }
+
+    case FTS_NS: {
+      if (!needstat) break;
+      if (!flags.f_flag || p->fts_errno != ENOENT) {
+        *result = UNLINK_FAIL;
+        fprintf(stderr, "%s: %s: %s\n", progname, p->fts_path, strerror(p->fts_errno));
+      }
+      continue;
+    }
+
+    case FTS_D: {
+      if (!flags.f_flag && !check(p->fts_path, p->fts_accpath, p->fts_statp)) {
+        fts_set(fts, p, FTS_SKIP);
+        p->fts_number = SKIPPED;
+      }
+      continue;
+    }
+
+    case FTS_DP: {
+      if (p->fts_number == SKIPPED) continue;
+      break;
+    }
+
+    default: {
+      if (!flags.f_flag && !check(p->fts_path, p->fts_accpath, p->fts_statp)) {
+        continue;
+      }
+    } break;
+    }
+    int r;
+    if (p->fts_info == FTS_DP || p->fts_info == FTS_DNR) {
+      r = (rmdir(p->fts_accpath) == 0) || (flags.f_flag && errno == ENOENT);
+    } else {
+      r = (unlink(p->fts_accpath) == 0) || (flags.f_flag && errno == ENOENT);
+    }
+
+    if (r != 0) {
+      if (flags.v_flag) fprintf(stdout, "%s\n", p->fts_path);
+      continue;
+    }
+
+    if (!flags.f_flag || errno != ENOENT) {
+      *result = UNLINK_FAIL;
+      fprintf(stderr, "%s: %s: %s\n", progname, p->fts_path, strerror(errno));
+    }
   }
 
   if (errno != 0) {
     *result = UNLINK_FAIL;
-  } else {
-    *result = OK;
+    fprintf(stderr, "%s: fts_read: %s\n", progname, strerror(errno));
   }
-
   fts_close(fts);
 }
 
@@ -250,7 +304,7 @@ int main(int argc, char *argv[]) {
   for (int i = optind; i < argc; i++) {
     rm_result_e result = OK;
     if (flags.r_flag) {
-      rm_tree(argv[i], &result);
+      rm_tree(argv[i], &result, argv[0]);
     } else {
       rm_file(argv[i], &result);
       switch (result) {
@@ -262,6 +316,9 @@ int main(int argc, char *argv[]) {
         ret = 1;
         fprintf(stderr, "%s: %s: is a directory\n", argv[0], argv[i]);
         continue;
+      case FAIL:
+        fprintf(stderr, "%s: %s: %s\n", argv[0], argv[i], strerror(rm_errno));
+        exit(1);
       case OK_V:
         fprintf(stdout, "%s\n", argv[i]);
         continue;
