@@ -40,7 +40,7 @@ AI too too much so it ended up taking me quite a while.
 - [x] yes
 - [x] touch
 - [x] tee
-- [ ] rm 
+- [x] rm 
 - [ ] du
 - [ ] cp
 - [ ] mv
