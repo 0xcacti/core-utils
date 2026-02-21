@@ -159,7 +159,7 @@ void rm_file(char *path, rm_result_e *result) {
 void rm_tree(char *path, rm_result_e *result, char *progname) {
   *result = OK;
   bool needstat = !flags.f_flag && !flags.i_flag && is_term;
-  int fts_flags = FTS_PHYSICAL;
+  int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
   if (!needstat) fts_flags |= FTS_NOSTAT;
 
   char *paths[2];
