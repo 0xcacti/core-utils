@@ -24,6 +24,13 @@ however, on some of the more annoying ones (like `touch`), I simplify down
 to just the basic functionality so that I learn how the util works without
 getting bogged down in all the edge cases.
 
+I also was humbled a ton throughout this project.  I figured, oooh, 
+this will be a fun and easy project to rip out over a couple hours.  Well, 
+it turns out that building the core utils requires you to know actually 
+a lot about unix systems.  I didn't know any of it, and tried not to use 
+AI too too much so it ended up taking me quite a while. 
+
+
 ### TODO
 
 - [x] cat
