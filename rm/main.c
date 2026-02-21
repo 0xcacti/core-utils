@@ -124,24 +124,22 @@ void rm_file(char *path, rm_result_e *result) {
   }
 
   if (S_ISDIR(st.st_mode) && !flags.d_flag) {
-    rm_errno = errno;
     *result = DIR_FAIL;
     return;
   }
 
   if (!flags.f_flag && !check(path, path, &st)) {
-    rm_errno = errno;
     *result = OK;
     return;
   }
 
-  int r = 0;
+  int ok = 0;
   if (S_ISDIR(st.st_mode)) {
-    r = rmdir(path);
+    ok = rmdir(path);
   } else {
-    r = unlink(path);
+    ok = unlink(path);
   }
-  if (r != 0) {
+  if (ok != 0) {
     if (!flags.f_flag || errno != ENOENT) {
       rm_errno = errno;
       *result = UNLINK_FAIL;
@@ -159,6 +157,7 @@ void rm_file(char *path, rm_result_e *result) {
 }
 
 void rm_tree(char *path, rm_result_e *result, char *progname) {
+  *result = OK;
   bool needstat = !flags.f_flag && !flags.i_flag && is_term;
   int fts_flags = FTS_PHYSICAL;
   if (!needstat) fts_flags |= FTS_NOSTAT;
@@ -180,11 +179,7 @@ void rm_tree(char *path, rm_result_e *result, char *progname) {
   while ((p = fts_read(fts)) != NULL) {
     switch (p->fts_info) {
     case FTS_DNR: {
-      if (!flags.f_flag || p->fts_errno != ENOENT) {
-        *result = UNLINK_FAIL;
-        fprintf(stderr, "%s: %s: %s\n", progname, p->fts_path, strerror(p->fts_errno));
-      }
-      continue;
+      break;
     }
 
     case FTS_ERR: {
@@ -305,6 +300,7 @@ int main(int argc, char *argv[]) {
     rm_result_e result = OK;
     if (flags.r_flag) {
       rm_tree(argv[i], &result, argv[0]);
+      if (result != OK && result != OK_V) ret = 1;
     } else {
       rm_file(argv[i], &result);
       switch (result) {
