@@ -33,6 +33,7 @@ static void usage(const char *progname) {
           progname);
   exit(2);
 }
+
 static void parse_err(count_e r, const char *progname, const char *arg) {
   if (r == COUNT_INVALID) {
     errno = EINVAL;
@@ -45,13 +46,8 @@ static void parse_err(count_e r, const char *progname, const char *arg) {
   exit(2);
 }
 
-static void error_msg(const char *progname, const char *msg) {
-  dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
-  exit(2);
-}
-
 static void error_errno(const char *progname, int err_num, const char *msg) {
-  dprintf(STDERR_FILENO, "%s: %s %s\n", progname, strerror(err_num), msg);
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, strerror(err_num), msg);
   exit(2);
 }
 
@@ -65,6 +61,38 @@ static count_e parse_count(const char *s, size_t *out) {
 
   *out = (size_t)val;
   return COUNT_OK;
+}
+
+int write_all(int outfd, const char *buf, size_t len) {
+  const uint8_t *p = (const uint8_t *)buf;
+  size_t off = 0;
+  while (off < len) {
+    ssize_t n = write(outfd, p + off, len - off);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    if (n == 0) {
+      errno = EIO;
+      return -1;
+    }
+    off += (size_t)n;
+  }
+  return 0;
+}
+
+int stream_copy(int infd, int outfd, flags_t flags) {
+  char buf[64 * 1024];
+
+  for (;;) {
+    ssize_t n = read(infd, &buf, sizeof(buf));
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    if (n == 0) return 0;
+    if (write_all(outfd, buf, (size_t)n) < 0) return -1;
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -101,7 +129,7 @@ int main(int argc, char *argv[]) {
       flags.count.as.lines = lines;
       break;
     }
-    case 'c':
+    case 'c': {
       size_t bytes = 0;
       count_e r = parse_count(optarg, &bytes);
       if (r != COUNT_OK) parse_err(r, argv[0], optarg);
@@ -109,6 +137,23 @@ int main(int argc, char *argv[]) {
       flags.count.as.bytes = bytes;
       break;
     }
+    case 'b': {
+      size_t blocks = 0;
+      count_e r = parse_count(optarg, &blocks);
+      if (r != COUNT_OK) parse_err(r, argv[0], optarg);
+      flags.count.mode = MODE_BYTES;
+      flags.count.as.blocks = blocks;
+      break;
+    }
+    default:
+      usage(argv[0]);
+    }
   }
-  printf("count: %d\n", flags.count.as.lines);
+
+  if (argc == optind) {
+    if (stream_copy(STDIN_FILENO, STDOUT_FILENO) < 0) {
+      error_errno(argv[0], errno, "stdin");
+      return 1;
+    }
+  }
 }
