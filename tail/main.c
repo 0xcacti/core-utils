@@ -82,8 +82,8 @@ int write_all(int outfd, const char *buf, size_t len) {
 }
 
 int stream_copy(int infd, int outfd, flags_t flags) {
+  (void)flags;
   char buf[64 * 1024];
-
   for (;;) {
     ssize_t n = read(infd, &buf, sizeof(buf));
     if (n < 0) {
@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (argc == optind) {
-    if (stream_copy(STDIN_FILENO, STDOUT_FILENO) < 0) {
+    if (stream_copy(STDIN_FILENO, STDOUT_FILENO, flags) < 0) {
       error_errno(argv[0], errno, "stdin");
       return 1;
     }
