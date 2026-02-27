@@ -84,14 +84,25 @@ int write_all(int outfd, const char *buf, size_t len) {
 int stream_copy(int infd, int outfd, flags_t flags) {
   (void)flags;
   char buf[64 * 1024];
-  for (;;) {
-    ssize_t n = read(infd, &buf, sizeof(buf));
-    if (n < 0) {
-      if (errno == EINTR) continue;
-      return -1;
+  switch (flags.count.mode) {
+  case MODE_LINES:
+    int lines_so_far = 0;
+    for (;;) {
+      if (lines_so_far >= flags.count.as.lines) break;
+      ssize_t n = read(infd, &buf, sizeof(buf));
+      if (n < 0) {
+        if (errno == EINTR) continue;
+        return -1;
+      }
+      if (n == 0) return 0;
+      if (write_all(outfd, buf, (size_t)n) < 0) return -1;
     }
-    if (n == 0) return 0;
-    if (write_all(outfd, buf, (size_t)n) < 0) return -1;
+
+  case MODE_BLOCKS:
+  case MODE_BYTES:
+  default:
+    fprintf(stderr, "not implemented yet");
+    exit(2);
   }
 }
 
