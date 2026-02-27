@@ -33,6 +33,17 @@ static void usage(const char *progname) {
           progname);
   exit(2);
 }
+static void parse_err(count_e r, const char *progname, const char *arg) {
+  if (r == COUNT_INVALID) {
+    errno = EINVAL;
+    fprintf(stderr, "%s: %s -- %s: %s\n", progname, strerror(errno), arg, "Invalid argument");
+  }
+  if (r == COUNT_RANGE) {
+    errno = ERANGE;
+    fprintf(stderr, "%s: %s -- %s: %s\n", progname, strerror(errno), arg, "Result too large");
+  }
+  exit(2);
+}
 
 static void error_msg(const char *progname, const char *msg) {
   dprintf(STDERR_FILENO, "%s: %s\n", progname, msg);
@@ -83,23 +94,20 @@ int main(int argc, char *argv[]) {
       flags.verbose = true;
       break;
     case 'n': {
-      size_t lns = 0;
-      count_e r = parse_count(optarg, &lns);
-      if (r == COUNT_INVALID) {
-        errno = EINVAL;
-        fprintf(stderr, "%s: %s -- %s: %s\n", argv[0], strerror(errno), optarg, "Invalid argument");
-        exit(2);
-      }
-      if (r == COUNT_RANGE) {
-        errno = ERANGE;
-        fprintf(stderr, "%s: %s -- %s: %s\n", argv[0], strerror(errno), optarg, "Result too large");
-        exit(2);
-      }
-      flags.count.as.lines = lns;
+      size_t lines = 0;
+      count_e r = parse_count(optarg, &lines);
+      if (r != COUNT_OK) parse_err(r, argv[0], optarg);
+      flags.count.mode = MODE_LINES;
+      flags.count.as.lines = lines;
       break;
     }
-    default:
-      usage(argv[0]);
+    case 'c':
+      size_t bytes = 0;
+      count_e r = parse_count(optarg, &bytes);
+      if (r != COUNT_OK) parse_err(r, argv[0], optarg);
+      flags.count.mode = MODE_BYTES;
+      flags.count.as.bytes = bytes;
+      break;
     }
   }
   printf("count: %d\n", flags.count.as.lines);
