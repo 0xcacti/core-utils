@@ -117,8 +117,18 @@ void write_lines(int outfd, flags_t flags, line_stack_t *s) {
   size_t have = s->len;
   size_t len = wanted <= have ? wanted : have;
   for (size_t i = 0; i < len; i++) {
-    char *out = stack_pop(s);
+    char *out = NULL;
+    if (flags.reverse) {
+      out = stack_pop(s);
+    } else {
+      out = s->data[i];
+    }
     ssize_t n = write(outfd, out, strlen(out));
+    if (n < 0) {
+      perror("write");
+      exit(1);
+    }
+    n = write(outfd, "\n", 1);
     if (n < 0) {
       perror("write");
       exit(1);
