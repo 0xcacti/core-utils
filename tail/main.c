@@ -247,9 +247,12 @@ int tail_file(char *path, flags_t flags) {
 
   switch (flags.count.mode) {
   case MODE_LINES: {
+    size_t want = flags.count.as.lines;
+    unsigned char last = 0;
+    bool skip_initial_empty = false;
     line_stack_t s = {0};
     stack_init(&s);
-    while ((char *l = fgets(f)
+    // while ((char *l = fgets(f)
   }
   case MODE_BLOCKS:
   case MODE_BYTES:
@@ -321,11 +324,14 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (argc + 1 == optind) flags.quiet = true;
+
   int exit_code = 0;
   for (int i = optind; i < argc; i++) {
     char *filename = argv[i];
     // add separators here
     // or don't if quiet
+    if (!flags.quiet) fprintf(stdout, "==> %s <==\n", filename);
     if (tail_file(filename, flags) < 0) {
       error_errno(argv[0], errno, filename);
       exit_code = 1;
