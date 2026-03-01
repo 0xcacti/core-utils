@@ -1,10 +1,12 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 typedef enum { COUNT_OK, COUNT_INVALID, COUNT_RANGE } count_e;
 typedef enum { MODE_LINES, MODE_BLOCKS, MODE_BYTES } mode_e;
@@ -198,6 +200,58 @@ int stream_copy(int infd, int outfd, flags_t flags) {
     }
   }
   case MODE_BLOCKS:
+
+  case MODE_BYTES:
+  default:
+    fprintf(stderr, "not implemented yet");
+    exit(2);
+  }
+
+  return 0;
+}
+
+int tail_file(char *path, flags_t flags) {
+  FILE *f = fopen(path, "r");
+  if (f == NULL) {
+    return -1;
+  }
+
+  int fd = fileno(f);
+  if (fd < 0) return -1;
+
+  struct stat st;
+  if (fstat(fd, &st) < 0) {
+    int saved = errno;
+    close(fd);
+    errno = saved;
+    return -1;
+  }
+
+  if (!S_ISREG(st.st_mode)) {
+    int rc = stream_copy(fd, STDOUT_FILENO, flags);
+    int stream_errno = 0;
+    if (rc < 0) stream_errno = errno;
+    int close_rc = close(fd);
+    int close_errno = 0;
+    if (close_rc < 0) close_errno = errno;
+    if (rc < 0) {
+      errno = stream_errno;
+      return -1;
+    }
+    if (close_rc < 0) {
+      errno = close_errno;
+      return -1;
+    }
+    return 0;
+  }
+
+  switch (flags.count.mode) {
+  case MODE_LINES: {
+    line_stack_t s = {0};
+    stack_init(&s);
+    while ((char *l = fgets(f)
+  }
+  case MODE_BLOCKS:
   case MODE_BYTES:
   default:
     fprintf(stderr, "not implemented yet");
@@ -266,4 +320,16 @@ int main(int argc, char *argv[]) {
       return 1;
     }
   }
+
+  int exit_code = 0;
+  for (int i = optind; i < argc; i++) {
+    char *filename = argv[i];
+    // add separators here
+    // or don't if quiet
+    if (tail_file(filename, flags) < 0) {
+      error_errno(argv[0], errno, filename);
+      exit_code = 1;
+    }
+  }
+  return exit_code;
 }
