@@ -41,7 +41,7 @@ AI too too much so it ended up taking me quite a while.
 - [x] touch
 - [x] tee
 - [x] rm 
-- [ ] tail (in progress)
+- [ ] tail
 - [ ] du
 - [ ] cp
 - [ ] mv
