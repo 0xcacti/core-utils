@@ -8,6 +8,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#define BLOCK_SIZE 512 // 512 bytes
+
 typedef enum { COUNT_OK, COUNT_INVALID, COUNT_RANGE } count_e;
 typedef enum { MODE_LINES, MODE_BLOCKS, MODE_BYTES } mode_e;
 
@@ -61,6 +63,14 @@ char *stack_pop(line_stack_t *stack) {
   return stack->data[--stack->len];
 }
 
+void stack_free(line_stack_t *stack) {
+  for (size_t i = 0; i < stack->len; i++) {
+    free(stack->data[i]);
+  }
+  free(stack->data);
+  stack->data = NULL;
+}
+
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-F | -f | -r] [-qv] [-b number | -c number | -n number] [file ...]\n",
           progname);
@@ -96,23 +106,13 @@ static count_e parse_count(const char *s, size_t *out) {
   return COUNT_OK;
 }
 
-// int write_all(int outfd, const char *buf, size_t len) {
-//   const uint8_t *p = (const uint8_t *)buf;
-//   size_t off = 0;
-//   while (off < len) {
-//     ssize_t n = write(outfd, p + off, len - off);
-//     if (n < 0) {
-//       if (errno == EINTR) continue;
-//       return -1;
-//     }
-//     if (n == 0) {
-//       errno = EIO;
-//       return -1;
-//     }
-//     off += (size_t)n;
-//   }
-//   return 0;
-// }
+static off_t max(off_t x, off_t y) {
+  return (x >= y) ? x : y;
+}
+
+static off_t min(off_t x, off_t y) {
+  return (x >= y) ? y : x;
+}
 
 void write_lines(int outfd, flags_t flags, line_stack_t *s) {
   size_t wanted = flags.count.as.lines;
@@ -209,13 +209,27 @@ int stream_copy(int infd, int outfd, flags_t flags) {
   return 0;
 }
 
-int tail_file(char *path, flags_t flags) {
-  FILE *f = fopen(path, "r");
-  if (f == NULL) {
-    return -1;
+void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
+  size_t new_len = *str_len + prefix_len;
+  if (new_len + 1 >= *str_cap) {
+    size_t new_cap = (new_len + 1) * 2;
+    char *new_str = realloc(*str, new_cap);
+    if (new_str == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+    *str = new_str;
+    *str_cap = new_cap;
   }
+  memmove(*str + prefix_len, *str, *str_len);
+  memcpy(*str, prefix, prefix_len);
+  *str_len = new_len;
+  (*str)[new_len] = '\0';
+}
 
-  int fd = fileno(f);
+int tail_file(char *path, flags_t flags) {
+
+  int fd = open(path, O_RDONLY);
   if (fd < 0) return -1;
 
   struct stat st;
@@ -247,16 +261,72 @@ int tail_file(char *path, flags_t flags) {
   switch (flags.count.mode) {
   case MODE_LINES: {
     size_t want = flags.count.as.lines;
-    unsigned char last = 0;
-    bool skip_initial_empty = false;
+
     line_stack_t s = {0};
     stack_init(&s);
-    fseek(f, 0, SEEK_END);
-    char *l;
+    off_t end = lseek(fd, 0, SEEK_END);
+    off_t pos = end;
+    size_t carry_cap = BLOCK_SIZE;
+    size_t carry_len = 0;
+    char *carry = malloc(BLOCK_SIZE);
+    if (carry == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+    size_t have_lines = 0;
 
-    while ((char *l
+    char buf[BLOCK_SIZE];
+    while (pos > 0 && have_lines < want) {
+      off_t block_start = max(0, pos - BLOCK_SIZE);
+      lseek(fd, block_start, SEEK_SET);
+      int n = read(fd, buf, pos - block_start);
+      if (n < 0) {
+        perror("read");
+        exit(EXIT_FAILURE);
+      }
+      pos = block_start;
+      int right = n;
 
-    // while ((char *l = fgets(f)
+      for (int i = n - 1; i >= 0; i--) {
+        if (buf[i] == '\n') {
+          int start = i + 1;
+          int slice_len = right - start;
+          prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap);
+          char *line = malloc(carry_len + 1);
+          if (line == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+          }
+          memcpy(line, carry, carry_len);
+          line[carry_len] = '\0';
+          stack_push(&s, line);
+          carry_len = 0;
+          right = i;
+          have_lines++;
+          if (have_lines == want) break;
+        }
+      }
+      if (have_lines < want && right > 0) {
+        prepend(buf, right, &carry, &carry_len, &carry_cap);
+      }
+    }
+
+    if (have_lines < want && carry_len > 0) {
+      char *line = malloc(carry_len + 1);
+      if (line == NULL) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+      }
+      memcpy(line, carry, carry_len);
+      line[carry_len] = '\0';
+      stack_push(&s, line);
+      have_lines++;
+      carry_len = 0;
+    }
+    write_lines(STDOUT_FILENO, flags, &s);
+    stack_free(&s);
+    free(carry);
+    break;
   }
   case MODE_BLOCKS:
   case MODE_BYTES:
@@ -311,7 +381,7 @@ int main(int argc, char *argv[]) {
       size_t blocks = 0;
       count_e r = parse_count(optarg, &blocks);
       if (r != COUNT_OK) parse_err(r, argv[0], optarg);
-      flags.count.mode = MODE_BYTES;
+      flags.count.mode = MODE_BLOCKS;
       flags.count.as.blocks = blocks;
       break;
     }
