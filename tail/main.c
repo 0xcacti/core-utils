@@ -203,8 +203,7 @@ int stream_copy(int infd, int outfd, flags_t flags) {
 
   case MODE_BYTES:
   default:
-    fprintf(stderr, "not implemented yet");
-    exit(2);
+    fprintf(stderr, "not implemented yet\n");
   }
 
   return 0;
@@ -257,8 +256,7 @@ int tail_file(char *path, flags_t flags) {
   case MODE_BLOCKS:
   case MODE_BYTES:
   default:
-    fprintf(stderr, "not implemented yet");
-    exit(2);
+    fprintf(stderr, "not implemented yet\n");
   }
 }
 
@@ -324,8 +322,18 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (argc + 1 == optind) flags.quiet = true;
+  // requirements
+  // no quiet or verbose specified,
+  // if quiet or verbose that overrides
+  if (!flags.quiet && !flags.verbose) {
+    if (argc - optind == 1) {
+      flags.quiet = true;
+    } else {
+      flags.verbose = true;
+    }
+  }
 
+  // if queiet
   int exit_code = 0;
   for (int i = optind; i < argc; i++) {
     char *filename = argv[i];
