@@ -251,6 +251,11 @@ int tail_file(char *path, flags_t flags) {
     bool skip_initial_empty = false;
     line_stack_t s = {0};
     stack_init(&s);
+    fseek(f, 0, SEEK_END);
+    char *l;
+
+    while ((char *l
+
     // while ((char *l = fgets(f)
   }
   case MODE_BLOCKS:
@@ -337,8 +342,6 @@ int main(int argc, char *argv[]) {
   int exit_code = 0;
   for (int i = optind; i < argc; i++) {
     char *filename = argv[i];
-    // add separators here
-    // or don't if quiet
     if (!flags.quiet) fprintf(stdout, "==> %s <==\n", filename);
     if (tail_file(filename, flags) < 0) {
       error_errno(argv[0], errno, filename);
