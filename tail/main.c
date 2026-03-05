@@ -138,8 +138,15 @@ void write_lines(int outfd, flags_t flags, line_stack_t *s) {
   }
 }
 
+void write_bytes(int outfd, char *bytes, size_t bytes_len) {
+  ssize_t n = write(outfd, bytes, bytes_len);
+  if (n < 0) {
+    perror("write");
+    exit(EXIT_FAILURE);
+  }
+}
+
 int stream_copy(int infd, int outfd, flags_t flags) {
-  (void)flags;
   char buf[64 * 1024];
   switch (flags.count.mode) {
   case MODE_LINES: {
@@ -199,9 +206,12 @@ int stream_copy(int infd, int outfd, flags_t flags) {
       }
     }
   }
+  case MODE_BYTES: {
+    break;
+  }
+
   case MODE_BLOCKS:
 
-  case MODE_BYTES:
   default:
     fprintf(stderr, "not implemented yet\n");
   }
@@ -266,6 +276,21 @@ int tail_file(char *path, flags_t flags) {
     stack_init(&s);
     off_t end = lseek(fd, 0, SEEK_END);
     off_t pos = end;
+    if (pos > 0) {
+      char last = 0;
+      if (lseek(fd, pos - 1, SEEK_SET) < 0) {
+        perror("lseek");
+        exit(EXIT_FAILURE);
+      }
+      int r = read(fd, &last, 1);
+      if (r < 0) {
+        perror("read");
+        exit(EXIT_FAILURE);
+      }
+      if (r == 1 && last == '\n') {
+        pos -= 1;
+      }
+    }
     size_t carry_cap = BLOCK_SIZE;
     size_t carry_len = 0;
     char *carry = malloc(BLOCK_SIZE);
@@ -323,16 +348,36 @@ int tail_file(char *path, flags_t flags) {
       have_lines++;
       carry_len = 0;
     }
+    flags.reverse = !flags.reverse;
     write_lines(STDOUT_FILENO, flags, &s);
     stack_free(&s);
     free(carry);
     break;
   }
+  case MODE_BYTES: {
+    off_t want = (off_t)flags.count.as.bytes;
+    off_t end = lseek(fd, 0, SEEK_END);
+    if (want > end) want = end;
+    lseek(fd, end - want, SEEK_SET);
+    char *out = malloc(want);
+    if (out == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+    ssize_t n = read(fd, out, want);
+    if (n < 0) {
+      perror("read");
+      exit(EXIT_FAILURE);
+    }
+    write_bytes(STDOUT_FILENO, flags, out, want);
+    break;
+  }
   case MODE_BLOCKS:
-  case MODE_BYTES:
   default:
     fprintf(stderr, "not implemented yet\n");
   }
+  close(fd);
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -388,6 +433,11 @@ int main(int argc, char *argv[]) {
     default:
       usage(argv[0]);
     }
+  }
+
+  if (flags.count.mode != MODE_LINES && flags.reverse) {
+    fprintf(stderr, "%s: cannot use -r with bytes or blocks mode\n", argv[0]);
+    exit(2);
   }
 
   if (argc == optind) {
