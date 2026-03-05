@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define BLOCK_SIZE 512 // 512 bytes
 
@@ -139,10 +140,15 @@ void write_lines(int outfd, flags_t flags, line_stack_t *s) {
 }
 
 void write_bytes(int outfd, char *bytes, size_t bytes_len) {
-  ssize_t n = write(outfd, bytes, bytes_len);
-  if (n < 0) {
-    perror("write");
-    exit(EXIT_FAILURE);
+  size_t off = 0;
+  while (off < bytes_len) {
+    ssize_t n = write(outfd, bytes + off, bytes_len - off);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      perror("write");
+      exit(EXIT_FAILURE);
+    }
+    off += (size_t)n;
   }
 }
 
@@ -369,10 +375,33 @@ int tail_file(char *path, flags_t flags) {
       perror("read");
       exit(EXIT_FAILURE);
     }
-    write_bytes(STDOUT_FILENO, flags, out, want);
+    write_bytes(STDOUT_FILENO, out, want);
     break;
   }
-  case MODE_BLOCKS:
+  case MODE_BLOCKS: {
+    off_t end = lseek(fd, 0, SEEK_END);
+    size_t blocks_wanted = flags.count.as.blocks;
+    off_t want = blocks_wanted * BLOCK_SIZE;
+
+    off_t start = end;
+    if (blocks_wanted > 1) {
+      start = end - (blocks_wanted - 1) * (off_t)BLOCK_SIZE;
+      if (start < 0) start = 0;
+    }
+    lseek(fd, start, SEEK_SET);
+    char *out = malloc(want);
+    if (out == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+    ssize_t n = read(fd, out, want);
+    if (n < 0) {
+      perror("read");
+      exit(EXIT_FAILURE);
+    }
+    write_bytes(STDOUT_FILENO, out, want);
+    break;
+  }
   default:
     fprintf(stderr, "not implemented yet\n");
   }
@@ -447,9 +476,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // requirements
-  // no quiet or verbose specified,
-  // if quiet or verbose that overrides
   if (!flags.quiet && !flags.verbose) {
     if (argc - optind == 1) {
       flags.quiet = true;
@@ -458,7 +484,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // if queiet
   int exit_code = 0;
   for (int i = optind; i < argc; i++) {
     char *filename = argv[i];
