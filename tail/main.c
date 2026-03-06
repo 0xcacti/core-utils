@@ -225,6 +225,20 @@ int stream_copy(int infd, int outfd, flags_t flags) {
   return 0;
 }
 
+static int read_to_buffer(int fd, char *buf, size_t want) {
+  size_t total = 0;
+  while (total < want) {
+    ssize_t n = read(fd, buf, want - total);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    if (n == 0) break;
+    total += (size_t)n;
+  }
+  return (ssize_t)total;
+}
+
 void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
   size_t new_len = *str_len + prefix_len;
   if (new_len + 1 >= *str_cap) {
@@ -243,7 +257,7 @@ void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *
   (*str)[new_len] = '\0';
 }
 
-int tail_file(char *path, flags_t flags) {
+int tail_file(char *progname, char *path, flags_t flags) {
 
   int fd = open(path, O_RDONLY);
   if (fd < 0) return -1;
@@ -257,6 +271,12 @@ int tail_file(char *path, flags_t flags) {
   }
 
   if (!S_ISREG(st.st_mode)) {
+    if (flags.follow || flags.super_follow) {
+      fprintf(stderr, "%s: cannot use -f or -F with non-regular files\n", progname);
+      close(fd);
+      exit(2);
+    }
+
     int rc = stream_copy(fd, STDOUT_FILENO, flags);
     int stream_errno = 0;
     if (rc < 0) stream_errno = errno;
@@ -370,8 +390,8 @@ int tail_file(char *path, flags_t flags) {
       perror("malloc");
       exit(EXIT_FAILURE);
     }
-    ssize_t n = read(fd, out, want);
-    if (n < 0) {
+    int r = read_to_buffer(fd, out, want);
+    if (r < 0) {
       perror("read");
       exit(EXIT_FAILURE);
     }
@@ -394,8 +414,8 @@ int tail_file(char *path, flags_t flags) {
       perror("malloc");
       exit(EXIT_FAILURE);
     }
-    ssize_t n = read(fd, out, want);
-    if (n < 0) {
+    int r = read_to_buffer(fd, out, want);
+    if (r < 0) {
       perror("read");
       exit(EXIT_FAILURE);
     }
@@ -470,10 +490,16 @@ int main(int argc, char *argv[]) {
   }
 
   if (argc == optind) {
+    if (flags.follow || flags.super_follow) {
+      fprintf(stderr, "%s: cannot use -f and -F with stdin", argv[0]);
+      exit(2);
+    }
+
     if (stream_copy(STDIN_FILENO, STDOUT_FILENO, flags) < 0) {
       error_errno(argv[0], errno, "stdin");
       return 1;
     }
+    return 0;
   }
 
   if (!flags.quiet && !flags.verbose) {
@@ -488,7 +514,7 @@ int main(int argc, char *argv[]) {
   for (int i = optind; i < argc; i++) {
     char *filename = argv[i];
     if (!flags.quiet) fprintf(stdout, "==> %s <==\n", filename);
-    if (tail_file(filename, flags) < 0) {
+    if (tail_file(argv[0], filename, flags) < 0) {
       error_errno(argv[0], errno, filename);
       exit_code = 1;
     }
