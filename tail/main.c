@@ -34,9 +34,14 @@ typedef struct {
 } flags_t;
 
 typedef struct {
+  char *buf;
+  size_t len;
+} line_t;
+
+typedef struct {
   size_t len;
   size_t capacity;
-  char **data;
+  line_t *data;
 } line_stack_t;
 
 void stack_init(line_stack_t *stack) {
@@ -45,10 +50,10 @@ void stack_init(line_stack_t *stack) {
   stack->data = NULL;
 }
 
-void stack_push(line_stack_t *stack, char *elem) {
+void stack_push(line_stack_t *stack, line_t elem) {
   if (stack->len >= stack->capacity) {
     int new_cap = stack->capacity == 0 ? 8 : stack->capacity * 2;
-    char **double_stack = realloc(stack->data, new_cap * sizeof(char *));
+    line_t *double_stack = realloc(stack->data, new_cap * sizeof(line_t));
     if (double_stack == NULL) {
       perror("malloc");
       exit(2);
@@ -59,14 +64,14 @@ void stack_push(line_stack_t *stack, char *elem) {
   stack->data[stack->len++] = elem;
 }
 
-char *stack_pop(line_stack_t *stack) {
-  if (stack->len == 0) return NULL;
+line_t stack_pop(line_stack_t *stack) {
+  if (stack->len == 0) return (line_t){0};
   return stack->data[--stack->len];
 }
 
 void stack_free(line_stack_t *stack) {
   for (size_t i = 0; i < stack->len; i++) {
-    free(stack->data[i]);
+    free(stack->data[i].buf);
   }
   free(stack->data);
   stack->data = NULL;
@@ -111,41 +116,35 @@ static off_t max(off_t x, off_t y) {
   return (x >= y) ? x : y;
 }
 
-void write_lines(int outfd, flags_t flags, line_stack_t *s) {
-  size_t wanted = flags.count.as.lines;
-  size_t have = s->len;
-  size_t len = wanted <= have ? wanted : have;
-  for (size_t i = 0; i < len; i++) {
-    char *out = NULL;
-    if (flags.reverse) {
-      out = stack_pop(s);
-    } else {
-      out = s->data[i];
-    }
-    ssize_t n = write(outfd, out, strlen(out));
-    if (n < 0) {
-      perror("write");
-      exit(1);
-    }
-    n = write(outfd, "\n", 1);
-    if (n < 0) {
-      perror("write");
-      exit(1);
-    }
-  }
-}
-
-void write_bytes(int outfd, char *bytes, size_t bytes_len) {
+static int write_bytes(int outfd, char *bytes, size_t bytes_len) {
   size_t off = 0;
   while (off < bytes_len) {
     ssize_t n = write(outfd, bytes + off, bytes_len - off);
     if (n < 0) {
       if (errno == EINTR) continue;
-      perror("write");
-      exit(EXIT_FAILURE);
+      return -1;
     }
     off += (size_t)n;
   }
+  return 0;
+}
+
+static int write_lines(int outfd, flags_t flags, line_stack_t *s) {
+  size_t wanted = flags.count.as.lines;
+  size_t have = s->len;
+  size_t len = wanted <= have ? wanted : have;
+  for (size_t i = 0; i < len; i++) {
+    line_t out;
+    if (flags.reverse) {
+      out = stack_pop(s);
+    } else {
+      out = s->data[i];
+    }
+    int r = write_bytes(outfd, out.buf, out.len);
+    if (flags.reverse) free(out.buf);
+    if (r < 0) return -1;
+  }
+  return 0;
 }
 
 int stream_copy(int infd, int outfd, flags_t flags) {
@@ -164,15 +163,15 @@ int stream_copy(int infd, int outfd, flags_t flags) {
       }
       if (n == 0) {
         if (carry_len > 0) {
-          char *line = malloc(carry_len + 1);
+          char *line = malloc(carry_len);
           if (line == NULL) return -1;
           memcpy(line, carry, carry_len);
-          line[carry_len] = '\0';
-          stack_push(&lines, line);
+          stack_push(&lines, (line_t){.buf = line, .len = carry_len});
         }
         free(carry);
-        write_lines(outfd, flags, &lines);
-        return 0;
+        int r = write_lines(outfd, flags, &lines);
+        stack_free(&lines);
+        return r;
       }
       char *buf_p = (char *)buf;
       size_t remaining = n;
@@ -191,18 +190,17 @@ int stream_copy(int infd, int outfd, flags_t flags) {
           }
           break;
         }
-        size_t seg_len = nl - buf_p;
+        size_t seg_len = (nl - buf_p) + 1;
         size_t line_len = carry_len + seg_len;
-        char *line = malloc(line_len + 1);
+        char *line = malloc(line_len);
         if (line == NULL) return -1;
         if (carry_len > 0) memcpy(line, carry, carry_len);
         if (seg_len > 0) memcpy(line + carry_len, buf_p, seg_len);
-        line[line_len] = '\0';
-        stack_push(&lines, line);
+        stack_push(&lines, (line_t){.buf = line, .len = line_len});
         free(carry);
         carry = NULL;
         carry_len = 0;
-        size_t consumed = seg_len + 1;
+        size_t consumed = seg_len;
         buf_p += consumed;
         remaining -= consumed;
       }
@@ -267,7 +265,13 @@ static int tail_regular_last_bytes(int fd, off_t start, size_t want) {
     errno = saved;
     return -1;
   }
-  write_bytes(STDOUT_FILENO, out, (size_t)r);
+  r = (int)write_bytes(STDOUT_FILENO, out, (size_t)r);
+  if (r < 0) {
+    int saved = errno;
+    free(out);
+    errno = saved;
+    return -1;
+  }
   free(out);
   return 0;
 }
@@ -317,17 +321,16 @@ static int tail_regular_lines(int fd, flags_t flags) {
 
     for (int i = n - 1; i >= 0; i--) {
       if (buf[i] == '\n') {
-        int start = i + 1;
+        int start = i;
         int slice_len = right - start;
         prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap);
-        char *line = malloc(carry_len + 1);
+        char *line = malloc(carry_len);
         if (line == NULL) {
           perror("malloc");
           exit(EXIT_FAILURE);
         }
         memcpy(line, carry, carry_len);
-        line[carry_len] = '\0';
-        stack_push(&s, line);
+        stack_push(&s, (line_t){.buf = line, .len = carry_len});
         carry_len = 0;
         right = i;
         have_lines++;
@@ -340,22 +343,21 @@ static int tail_regular_lines(int fd, flags_t flags) {
   }
 
   if (have_lines < want && carry_len > 0) {
-    char *line = malloc(carry_len + 1);
+    char *line = malloc(carry_len);
     if (line == NULL) {
       perror("malloc");
       exit(EXIT_FAILURE);
     }
     memcpy(line, carry, carry_len);
-    line[carry_len] = '\0';
-    stack_push(&s, line);
+    stack_push(&s, (line_t){.buf = line, .len = carry_len});
     have_lines++;
     carry_len = 0;
   }
   flags.reverse = !flags.reverse;
-  write_lines(STDOUT_FILENO, flags, &s);
+  int r = write_lines(STDOUT_FILENO, flags, &s);
   stack_free(&s);
   free(carry);
-  return 0;
+  return r;
 }
 
 int tail_file(char *progname, char *path, flags_t flags) {
