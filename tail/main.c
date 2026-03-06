@@ -228,7 +228,7 @@ int stream_copy(int infd, int outfd, flags_t flags) {
 static int read_to_buffer(int fd, char *buf, size_t want) {
   size_t total = 0;
   while (total < want) {
-    ssize_t n = read(fd, buf, want - total);
+    ssize_t n = read(fd, buf + total, want - total);
     if (n < 0) {
       if (errno == EINTR) continue;
       return -1;
@@ -236,7 +236,7 @@ static int read_to_buffer(int fd, char *buf, size_t want) {
     if (n == 0) break;
     total += (size_t)n;
   }
-  return (ssize_t)total;
+  return total;
 }
 
 void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
@@ -395,7 +395,8 @@ int tail_file(char *progname, char *path, flags_t flags) {
       perror("read");
       exit(EXIT_FAILURE);
     }
-    write_bytes(STDOUT_FILENO, out, want);
+    write_bytes(STDOUT_FILENO, out, (size_t)r);
+    free(out);
     break;
   }
   case MODE_BLOCKS: {
@@ -419,7 +420,8 @@ int tail_file(char *progname, char *path, flags_t flags) {
       perror("read");
       exit(EXIT_FAILURE);
     }
-    write_bytes(STDOUT_FILENO, out, want);
+    write_bytes(STDOUT_FILENO, out, (size_t)r);
+    free(out);
     break;
   }
   default:
@@ -491,7 +493,7 @@ int main(int argc, char *argv[]) {
 
   if (argc == optind) {
     if (flags.follow || flags.super_follow) {
-      fprintf(stderr, "%s: cannot use -f and -F with stdin", argv[0]);
+      fprintf(stderr, "%s: cannot use -f and -F with stdin\n", argv[0]);
       exit(2);
     }
 
