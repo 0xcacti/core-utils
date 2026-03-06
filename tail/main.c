@@ -283,6 +283,15 @@ static int tail_regular_lines(int fd, flags_t flags) {
   stack_init(&s);
   off_t end = lseek(fd, 0, SEEK_END);
   off_t pos = end;
+
+  size_t carry_cap = BLOCK_SIZE;
+  size_t carry_len = 0;
+  char *carry = malloc(BLOCK_SIZE);
+  if (carry == NULL) {
+    perror("malloc");
+    exit(EXIT_FAILURE);
+  }
+
   if (pos > 0) {
     char last = 0;
     if (lseek(fd, pos - 1, SEEK_SET) < 0) {
@@ -295,15 +304,10 @@ static int tail_regular_lines(int fd, flags_t flags) {
       exit(EXIT_FAILURE);
     }
     if (r == 1 && last == '\n') {
+      carry[0] = '\n';
+      carry_len = 1;
       pos -= 1;
     }
-  }
-  size_t carry_cap = BLOCK_SIZE;
-  size_t carry_len = 0;
-  char *carry = malloc(BLOCK_SIZE);
-  if (carry == NULL) {
-    perror("malloc");
-    exit(EXIT_FAILURE);
   }
   size_t have_lines = 0;
 
@@ -321,7 +325,7 @@ static int tail_regular_lines(int fd, flags_t flags) {
 
     for (int i = n - 1; i >= 0; i--) {
       if (buf[i] == '\n') {
-        int start = i;
+        int start = i + 1;
         int slice_len = right - start;
         prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap);
         char *line = malloc(carry_len);
@@ -332,7 +336,7 @@ static int tail_regular_lines(int fd, flags_t flags) {
         memcpy(line, carry, carry_len);
         stack_push(&s, (line_t){.buf = line, .len = carry_len});
         carry_len = 0;
-        right = i;
+        right = i + 1;
         have_lines++;
         if (have_lines == want) break;
       }
