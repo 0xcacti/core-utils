@@ -111,10 +111,6 @@ static off_t max(off_t x, off_t y) {
   return (x >= y) ? x : y;
 }
 
-static off_t min(off_t x, off_t y) {
-  return (x >= y) ? y : x;
-}
-
 void write_lines(int outfd, flags_t flags, line_stack_t *s) {
   size_t wanted = flags.count.as.lines;
   size_t have = s->len;
@@ -225,7 +221,7 @@ int stream_copy(int infd, int outfd, flags_t flags) {
   return 0;
 }
 
-static int read_to_buffer(int fd, char *buf, size_t want) {
+static ssize_t read_to_buffer(int fd, char *buf, size_t want) {
   size_t total = 0;
   while (total < want) {
     ssize_t n = read(fd, buf + total, want - total);
@@ -236,10 +232,10 @@ static int read_to_buffer(int fd, char *buf, size_t want) {
     if (n == 0) break;
     total += (size_t)n;
   }
-  return total;
+  return (ssize_t)total;
 }
 
-void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
+static void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
   size_t new_len = *str_len + prefix_len;
   if (new_len + 1 >= *str_cap) {
     size_t new_cap = (new_len + 1) * 2;
@@ -257,8 +253,112 @@ void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *
   (*str)[new_len] = '\0';
 }
 
-int tail_file(char *progname, char *path, flags_t flags) {
+static int tail_regular_last_bytes(int fd, off_t start, size_t want) {
+  if (lseek(fd, start, SEEK_SET) < 0) return -1;
+  char *out = malloc(want);
+  if (out == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+  ssize_t r = read_to_buffer(fd, out, want);
+  if (r < 0) {
+    int saved = errno;
+    free(out);
+    errno = saved;
+    return -1;
+  }
+  write_bytes(STDOUT_FILENO, out, (size_t)r);
+  free(out);
+  return 0;
+}
 
+static int tail_regular_lines(int fd, flags_t flags) {
+  size_t want = flags.count.as.lines;
+
+  line_stack_t s = {0};
+  stack_init(&s);
+  off_t end = lseek(fd, 0, SEEK_END);
+  off_t pos = end;
+  if (pos > 0) {
+    char last = 0;
+    if (lseek(fd, pos - 1, SEEK_SET) < 0) {
+      perror("lseek");
+      exit(EXIT_FAILURE);
+    }
+    int r = read(fd, &last, 1);
+    if (r < 0) {
+      perror("read");
+      exit(EXIT_FAILURE);
+    }
+    if (r == 1 && last == '\n') {
+      pos -= 1;
+    }
+  }
+  size_t carry_cap = BLOCK_SIZE;
+  size_t carry_len = 0;
+  char *carry = malloc(BLOCK_SIZE);
+  if (carry == NULL) {
+    perror("malloc");
+    exit(EXIT_FAILURE);
+  }
+  size_t have_lines = 0;
+
+  char buf[BLOCK_SIZE];
+  while (pos > 0 && have_lines < want) {
+    off_t block_start = max(0, pos - BLOCK_SIZE);
+    lseek(fd, block_start, SEEK_SET);
+    int n = read(fd, buf, pos - block_start);
+    if (n < 0) {
+      perror("read");
+      exit(EXIT_FAILURE);
+    }
+    pos = block_start;
+    int right = n;
+
+    for (int i = n - 1; i >= 0; i--) {
+      if (buf[i] == '\n') {
+        int start = i + 1;
+        int slice_len = right - start;
+        prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap);
+        char *line = malloc(carry_len + 1);
+        if (line == NULL) {
+          perror("malloc");
+          exit(EXIT_FAILURE);
+        }
+        memcpy(line, carry, carry_len);
+        line[carry_len] = '\0';
+        stack_push(&s, line);
+        carry_len = 0;
+        right = i;
+        have_lines++;
+        if (have_lines == want) break;
+      }
+    }
+    if (have_lines < want && right > 0) {
+      prepend(buf, right, &carry, &carry_len, &carry_cap);
+    }
+  }
+
+  if (have_lines < want && carry_len > 0) {
+    char *line = malloc(carry_len + 1);
+    if (line == NULL) {
+      perror("malloc");
+      exit(EXIT_FAILURE);
+    }
+    memcpy(line, carry, carry_len);
+    line[carry_len] = '\0';
+    stack_push(&s, line);
+    have_lines++;
+    carry_len = 0;
+  }
+  flags.reverse = !flags.reverse;
+  write_lines(STDOUT_FILENO, flags, &s);
+  stack_free(&s);
+  free(carry);
+  return 0;
+}
+
+int tail_file(char *progname, char *path, flags_t flags) {
   int fd = open(path, O_RDONLY);
   if (fd < 0) return -1;
 
@@ -276,7 +376,6 @@ int tail_file(char *progname, char *path, flags_t flags) {
       close(fd);
       exit(2);
     }
-
     int rc = stream_copy(fd, STDOUT_FILENO, flags);
     int stream_errno = 0;
     if (rc < 0) stream_errno = errno;
@@ -296,132 +395,47 @@ int tail_file(char *progname, char *path, flags_t flags) {
 
   switch (flags.count.mode) {
   case MODE_LINES: {
-    size_t want = flags.count.as.lines;
-
-    line_stack_t s = {0};
-    stack_init(&s);
-    off_t end = lseek(fd, 0, SEEK_END);
-    off_t pos = end;
-    if (pos > 0) {
-      char last = 0;
-      if (lseek(fd, pos - 1, SEEK_SET) < 0) {
-        perror("lseek");
-        exit(EXIT_FAILURE);
-      }
-      int r = read(fd, &last, 1);
-      if (r < 0) {
-        perror("read");
-        exit(EXIT_FAILURE);
-      }
-      if (r == 1 && last == '\n') {
-        pos -= 1;
-      }
+    if (tail_regular_lines(fd, flags) < 0) {
+      int saved = errno;
+      close(fd);
+      errno = saved;
+      return -1;
     }
-    size_t carry_cap = BLOCK_SIZE;
-    size_t carry_len = 0;
-    char *carry = malloc(BLOCK_SIZE);
-    if (carry == NULL) {
-      perror("malloc");
-      exit(EXIT_FAILURE);
-    }
-    size_t have_lines = 0;
-
-    char buf[BLOCK_SIZE];
-    while (pos > 0 && have_lines < want) {
-      off_t block_start = max(0, pos - BLOCK_SIZE);
-      lseek(fd, block_start, SEEK_SET);
-      int n = read(fd, buf, pos - block_start);
-      if (n < 0) {
-        perror("read");
-        exit(EXIT_FAILURE);
-      }
-      pos = block_start;
-      int right = n;
-
-      for (int i = n - 1; i >= 0; i--) {
-        if (buf[i] == '\n') {
-          int start = i + 1;
-          int slice_len = right - start;
-          prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap);
-          char *line = malloc(carry_len + 1);
-          if (line == NULL) {
-            perror("malloc");
-            exit(EXIT_FAILURE);
-          }
-          memcpy(line, carry, carry_len);
-          line[carry_len] = '\0';
-          stack_push(&s, line);
-          carry_len = 0;
-          right = i;
-          have_lines++;
-          if (have_lines == want) break;
-        }
-      }
-      if (have_lines < want && right > 0) {
-        prepend(buf, right, &carry, &carry_len, &carry_cap);
-      }
-    }
-
-    if (have_lines < want && carry_len > 0) {
-      char *line = malloc(carry_len + 1);
-      if (line == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-      }
-      memcpy(line, carry, carry_len);
-      line[carry_len] = '\0';
-      stack_push(&s, line);
-      have_lines++;
-      carry_len = 0;
-    }
-    flags.reverse = !flags.reverse;
-    write_lines(STDOUT_FILENO, flags, &s);
-    stack_free(&s);
-    free(carry);
     break;
   }
   case MODE_BYTES: {
     off_t want = (off_t)flags.count.as.bytes;
     off_t end = lseek(fd, 0, SEEK_END);
     if (want > end) want = end;
-    lseek(fd, end - want, SEEK_SET);
-    char *out = malloc(want);
-    if (out == NULL) {
-      perror("malloc");
-      exit(EXIT_FAILURE);
+    off_t start = end - want;
+    if (tail_regular_last_bytes(fd, start, (size_t)want) < 0) {
+      int saved = errno;
+      close(fd);
+      errno = saved;
+      return -1;
     }
-    int r = read_to_buffer(fd, out, want);
-    if (r < 0) {
-      perror("read");
-      exit(EXIT_FAILURE);
-    }
-    write_bytes(STDOUT_FILENO, out, (size_t)r);
-    free(out);
     break;
   }
   case MODE_BLOCKS: {
     off_t end = lseek(fd, 0, SEEK_END);
     size_t blocks_wanted = flags.count.as.blocks;
+    if (blocks_wanted > SIZE_MAX / BLOCK_SIZE) {
+      errno = EOVERFLOW;
+      close(fd);
+      return -1;
+    }
     off_t want = blocks_wanted * BLOCK_SIZE;
-
     off_t start = end;
     if (blocks_wanted > 1) {
       start = end - (blocks_wanted - 1) * (off_t)BLOCK_SIZE;
       if (start < 0) start = 0;
     }
-    lseek(fd, start, SEEK_SET);
-    char *out = malloc(want);
-    if (out == NULL) {
-      perror("malloc");
-      exit(EXIT_FAILURE);
+    if (tail_regular_last_bytes(fd, start, (size_t)want) < 0) {
+      int saved = errno;
+      close(fd);
+      errno = saved;
+      return -1;
     }
-    int r = read_to_buffer(fd, out, want);
-    if (r < 0) {
-      perror("read");
-      exit(EXIT_FAILURE);
-    }
-    write_bytes(STDOUT_FILENO, out, (size_t)r);
-    free(out);
     break;
   }
   default:
