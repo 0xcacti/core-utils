@@ -297,8 +297,20 @@ int stream_copy(int infd, int outfd, flags_t flags) {
       // read up to end of buf
       // [1 2 0 0 0]
       //      ^ start = 2, capacity = 5
-      if (br.start == br.capacity - 1) br.start = 0;
-      size_t to_read = br.capacity - br.start;
+      // read abc
+      // [a b c 0 0]
+      //    start = 0
+      //    length = 3
+      //    write_pos = 3
+      //    capacity = 5
+      // read xyz
+      // [z b c x y]
+      //    start = 1
+      //    length = 5
+      //    write_pos = 1
+      //    capacity = 5
+      size_t write_pos = (br.start + br.length) % br.capacity;
+      size_t to_read = br.capacity - write_pos;
       ssize_t n = read(infd, br.buf + ((br.start + br.length) % br.capacity), to_read);
       if (n < 0) {
         if (errno == EINTR) continue;
@@ -312,6 +324,10 @@ int stream_copy(int infd, int outfd, flags_t flags) {
           return -1;
         }
         break;
+      }
+      // update state
+      if ((write_pos + n) % br.capacity > br.start {
+        br.start = 
       }
     }
 
