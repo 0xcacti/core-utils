@@ -44,15 +44,36 @@ typedef struct {
   line_t *data;
 } line_stack_t;
 
-void stack_init(line_stack_t *stack) {
+typedef struct {
+  size_t start;
+  size_t length;
+  size_t capacity;
+  char *buf;
+} bytes_ring_t;
+
+static void bytes_ring_init(bytes_ring_t *b, size_t want) {
+  char *buf = malloc(want);
+  b->buf = buf;
+  b->length = 0;
+  b->capacity = want;
+  b->start = 0;
+}
+static void bytes_ring_free(bytes_ring_t *b) {
+  free(b->buf);
+  b->length = 0;
+  b->capacity = 0;
+  b->start = 0;
+}
+
+static void stack_init(line_stack_t *stack) {
   stack->len = 0;
   stack->capacity = 0;
   stack->data = NULL;
 }
 
-void stack_push(line_stack_t *stack, line_t elem) {
+static void stack_push(line_stack_t *stack, line_t elem) {
   if (stack->len >= stack->capacity) {
-    int new_cap = stack->capacity == 0 ? 8 : stack->capacity * 2;
+    size_t new_cap = stack->capacity == 0 ? 8 : stack->capacity * 2;
     line_t *double_stack = realloc(stack->data, new_cap * sizeof(line_t));
     if (double_stack == NULL) {
       perror("malloc");
@@ -64,17 +85,28 @@ void stack_push(line_stack_t *stack, line_t elem) {
   stack->data[stack->len++] = elem;
 }
 
-line_t stack_pop(line_stack_t *stack) {
+static line_t stack_pop(line_stack_t *stack) {
   if (stack->len == 0) return (line_t){0};
   return stack->data[--stack->len];
 }
 
-void stack_free(line_stack_t *stack) {
+static void stack_free(line_stack_t *stack) {
   for (size_t i = 0; i < stack->len; i++) {
     free(stack->data[i].buf);
   }
   free(stack->data);
   stack->data = NULL;
+  stack->len = 0;
+  stack->capacity = 0;
+}
+
+static void stack_drop_oldest(line_stack_t *stack) {
+  if (stack->len == 0) return;
+  free(stack->data[0].buf);
+  if (stack->len > 1) {
+    memmove(&stack->data[0], &stack->data[1], (stack->len - 1) * sizeof(line_t));
+  }
+  stack->len--;
 }
 
 static void usage(const char *progname) {
@@ -129,6 +161,19 @@ static int write_bytes(int outfd, char *bytes, size_t bytes_len) {
   return 0;
 }
 
+static int write_bytes_ring(int outfd, bytes_ring_t *br) {
+  size_t written = 0;
+  while (written < br->length) {
+    ssize_t n = write(outfd, br->buf + (br->start + written % br->length), br->length - written);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    written += (size_t)n;
+  }
+  return 0;
+}
+
 static int write_lines(int outfd, flags_t flags, line_stack_t *s) {
   size_t wanted = flags.count.as.lines;
   size_t have = s->len;
@@ -156,63 +201,122 @@ int stream_copy(int infd, int outfd, flags_t flags) {
   char buf[64 * 1024];
   switch (flags.count.mode) {
   case MODE_LINES: {
+    size_t want = flags.count.as.lines;
     line_stack_t lines = {0};
     stack_init(&lines);
+
     char *carry = NULL;
     size_t carry_len = 0;
+
     for (;;) {
       ssize_t n = read(infd, buf, sizeof(buf));
       if (n < 0) {
         if (errno == EINTR) continue;
+        free(carry);
+        stack_free(&lines);
         return -1;
       }
+
       if (n == 0) {
         if (carry_len > 0) {
           char *line = malloc(carry_len);
-          if (line == NULL) return -1;
+          if (line == NULL) {
+            free(carry);
+            stack_free(&lines);
+            return -1;
+          }
           memcpy(line, carry, carry_len);
-          stack_push(&lines, (line_t){.buf = line, .len = carry_len});
+
+          if (want > 0) {
+            if (lines.len == want) stack_drop_oldest(&lines);
+            stack_push(&lines, (line_t){.buf = line, .len = carry_len});
+          } else {
+            free(line);
+          }
         }
+
         free(carry);
         int r = write_lines(outfd, flags, &lines);
         stack_free(&lines);
         return r;
       }
-      char *buf_p = (char *)buf;
-      size_t remaining = n;
-      for (;;) {
-        char *nl = memchr(buf_p, '\n', remaining);
+      char *p = buf;
+      size_t remaining = (size_t)n;
+
+      while (remaining > 0) {
+        char *nl = memchr(p, '\n', remaining);
+
         if (nl == NULL) {
-          if (remaining > 0) {
-            char *new_carry = realloc(carry, carry_len + remaining);
-            if (new_carry == NULL) {
-              perror("malloc");
-              exit(1);
-            }
-            carry = new_carry;
-            memcpy(carry + carry_len, buf_p, remaining);
-            carry_len += remaining;
+          char *new_carry = realloc(carry, carry_len + remaining);
+          if (new_carry == NULL) {
+            free(carry);
+            stack_free(&lines);
+            return -1;
           }
+          carry = new_carry;
+          memcpy(carry + carry_len, p, remaining);
+          carry_len += remaining;
           break;
         }
-        size_t seg_len = (nl - buf_p) + 1;
+
+        size_t seg_len = (size_t)(nl - p) + 1;
         size_t line_len = carry_len + seg_len;
         char *line = malloc(line_len);
-        if (line == NULL) return -1;
+        if (line == NULL) {
+          free(carry);
+          stack_free(&lines);
+          return -1;
+        }
+
         if (carry_len > 0) memcpy(line, carry, carry_len);
-        if (seg_len > 0) memcpy(line + carry_len, buf_p, seg_len);
-        stack_push(&lines, (line_t){.buf = line, .len = line_len});
+        memcpy(line + carry_len, p, seg_len);
+
         free(carry);
         carry = NULL;
         carry_len = 0;
-        size_t consumed = seg_len;
-        buf_p += consumed;
-        remaining -= consumed;
+
+        if (want > 0) {
+          if (lines.len == want) stack_drop_oldest(&lines);
+          stack_push(&lines, (line_t){.buf = line, .len = line_len});
+        } else {
+          free(line);
+        }
+
+        p += seg_len;
+        remaining -= seg_len;
       }
     }
   }
   case MODE_BYTES: {
+    printf("entering modes bytes\n");
     size_t want = flags.count.as.bytes;
+    bytes_ring_t br = {0};
+    bytes_ring_init(&br, want);
+    if (br.buf == NULL) return -1;
+    for (;;) {
+      // read up to end of buf
+      // [1 2 0 0 0]
+      //      ^ start = 2, capacity = 5
+      if (br.start == br.capacity - 1) br.start = 0;
+      size_t to_read = br.capacity - br.start;
+      ssize_t n = read(infd, br.buf + ((br.start + br.length) % br.capacity), to_read);
+      if (n < 0) {
+        if (errno == EINTR) continue;
+        bytes_ring_free(&br);
+        return -1;
+      }
+      if (n == 0) {
+        int r = write_bytes_ring(outfd, &br);
+        if (r < 0) {
+          bytes_ring_free(&br);
+          return -1;
+        }
+        break;
+      }
+    }
+
+    bytes_ring_free(&br);
+    return 0;
   }
 
   case MODE_BLOCKS:
@@ -256,21 +360,21 @@ static void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, s
   (*str)[new_len] = '\0';
 }
 
-static int tail_regular_last_bytes(int fd, off_t start, size_t want) {
-  if (lseek(fd, start, SEEK_SET) < 0) return -1;
+static int tail_regular_last_bytes(int infd, int outfd, off_t start, size_t want) {
+  if (lseek(infd, start, SEEK_SET) < 0) return -1;
   char *out = malloc(want);
   if (out == NULL) {
     errno = ENOMEM;
     return -1;
   }
-  ssize_t r = read_to_buffer(fd, out, want);
+  ssize_t r = read_to_buffer(infd, out, want);
   if (r < 0) {
     int saved = errno;
     free(out);
     errno = saved;
     return -1;
   }
-  r = (int)write_bytes(STDOUT_FILENO, out, (size_t)r);
+  r = (int)write_bytes(outfd, out, (size_t)r);
   if (r < 0) {
     int saved = errno;
     free(out);
@@ -419,7 +523,7 @@ int tail_file(char *progname, char *path, flags_t flags) {
     off_t end = lseek(fd, 0, SEEK_END);
     if (want > end) want = end;
     off_t start = end - want;
-    if (tail_regular_last_bytes(fd, start, (size_t)want) < 0) {
+    if (tail_regular_last_bytes(fd, STDOUT_FILENO, start, (size_t)want) < 0) {
       int saved = errno;
       close(fd);
       errno = saved;
@@ -441,7 +545,7 @@ int tail_file(char *progname, char *path, flags_t flags) {
       start = end - (blocks_wanted - 1) * (off_t)BLOCK_SIZE;
       if (start < 0) start = 0;
     }
-    if (tail_regular_last_bytes(fd, start, (size_t)want) < 0) {
+    if (tail_regular_last_bytes(fd, STDOUT_FILENO, start, (size_t)want) < 0) {
       int saved = errno;
       close(fd);
       errno = saved;
