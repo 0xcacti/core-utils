@@ -133,15 +133,20 @@ static int write_lines(int outfd, flags_t flags, line_stack_t *s) {
   size_t wanted = flags.count.as.lines;
   size_t have = s->len;
   size_t len = wanted <= have ? wanted : have;
-  for (size_t i = 0; i < len; i++) {
-    line_t out;
-    if (flags.reverse) {
-      out = stack_pop(s);
-    } else {
-      out = s->data[i];
+
+  if (flags.reverse) {
+    for (size_t i = 0; i < len; i++) {
+      line_t out = stack_pop(s);
+      int r = write_bytes(outfd, out.buf, out.len);
+      free(out.buf);
+      if (r < 0) return -1;
     }
-    int r = write_bytes(outfd, out.buf, out.len);
-    if (flags.reverse) free(out.buf);
+    return 0;
+  }
+
+  size_t start = have > len ? have - len : 0;
+  for (size_t i = start; i < have; i++) {
+    int r = write_bytes(outfd, s->data[i].buf, s->data[i].len);
     if (r < 0) return -1;
   }
   return 0;
@@ -207,7 +212,7 @@ int stream_copy(int infd, int outfd, flags_t flags) {
     }
   }
   case MODE_BYTES: {
-    break;
+    size_t want = flags.count.as.bytes;
   }
 
   case MODE_BLOCKS:
