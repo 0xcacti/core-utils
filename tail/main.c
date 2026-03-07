@@ -201,6 +201,10 @@ static int write_bytes_ring(int outfd, bytes_ring_t *br) {
       if (errno == EINTR) continue;
       return -1;
     }
+    if (n == 0) {
+      errno = EIO;
+      return -1;
+    }
 
     written += (size_t)n;
   }
@@ -323,10 +327,10 @@ int stream_copy(int infd, int outfd, flags_t flags) {
   }
   case MODE_BYTES: {
     size_t want = flags.count.as.bytes;
+    if (want == 0) return 0;
     bytes_ring_t br = {0};
     bytes_ring_init(&br, want);
     if (br.buf == NULL) return -1;
-    char buf[1024 * 64];
     for (;;) {
       ssize_t n = read(infd, buf, sizeof(buf));
       if (n < 0) {
@@ -343,19 +347,48 @@ int stream_copy(int infd, int outfd, flags_t flags) {
         break;
       }
       bytes_ring_append(&br, buf, n);
-      // update state
     }
 
     bytes_ring_free(&br);
     return 0;
   }
 
-  case MODE_BLOCKS:
+  case MODE_BLOCKS: {
+    size_t want = flags.count.as.blocks;
+    if (want == 0) return 0;
+    if (want > SIZE_MAX / BLOCK_SIZE) {
+      errno = EOVERFLOW;
+      return -1;
+    }
 
-  default:
-    fprintf(stderr, "not implemented yet\n");
+    bytes_ring_t br = {0};
+    bytes_ring_init(&br, want * BLOCK_SIZE);
+    if (br.buf == NULL) return -1;
+    for (;;) {
+      ssize_t n = read(infd, buf, sizeof(buf));
+      if (n < 0) {
+        if (errno == EINTR) continue;
+        bytes_ring_free(&br);
+        return -1;
+      }
+      if (n == 0) {
+        int r = write_bytes_ring(outfd, &br);
+        if (r < 0) {
+          bytes_ring_free(&br);
+          return -1;
+        }
+        break;
+      }
+      bytes_ring_append(&br, buf, n);
+    }
+
+    bytes_ring_free(&br);
+    return 0;
   }
-
+  default:
+    fprintf(stderr, "invalid mode\n");
+    exit(2);
+  }
   return 0;
 }
 
@@ -585,7 +618,9 @@ int tail_file(char *progname, char *path, flags_t flags) {
     break;
   }
   default:
-    fprintf(stderr, "not implemented yet\n");
+    fprintf(stderr, "invalid mode\n");
+    close(fd);
+    exit(2);
   }
   close(fd);
   return 0;
