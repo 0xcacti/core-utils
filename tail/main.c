@@ -65,6 +65,33 @@ static void bytes_ring_free(bytes_ring_t *b) {
   b->start = 0;
 }
 
+static size_t min_size(size_t x, size_t y) {
+  return x < y ? x : y;
+}
+
+static void bytes_ring_append(bytes_ring_t *b, char *buf, size_t buf_len) {
+  if (buf_len >= b->capacity) {
+    buf = buf + (buf_len - b->capacity);
+    buf_len = b->capacity;
+  }
+
+  size_t write_pos = (b->start + b->length) % b->capacity;
+  size_t distance_to_end = b->capacity - write_pos;
+  size_t to_write = distance_to_end < buf_len ? distance_to_end : buf_len;
+  size_t remaining = buf_len - to_write;
+  memcpy(b->buf + write_pos, buf, to_write);
+  if (remaining > 0) {
+    memcpy(b->buf, buf + to_write, remaining);
+  }
+  size_t total = b->length + buf_len;
+  size_t discarded = 0;
+  if (total > b->capacity) {
+    discarded = total - b->capacity;
+  }
+  b->start = (b->start + discarded) % b->capacity;
+  b->length = min_size(b->capacity, buf_len + b->length);
+}
+
 static void stack_init(line_stack_t *stack) {
   stack->len = 0;
   stack->capacity = 0;
@@ -164,13 +191,20 @@ static int write_bytes(int outfd, char *bytes, size_t bytes_len) {
 static int write_bytes_ring(int outfd, bytes_ring_t *br) {
   size_t written = 0;
   while (written < br->length) {
-    ssize_t n = write(outfd, br->buf + (br->start + written % br->length), br->length - written);
+    size_t pos = (br->start + written) % br->capacity;
+    size_t remaining = br->length - written;
+    size_t contiguous = br->capacity - pos;
+    size_t chunk = min_size(remaining, contiguous);
+
+    ssize_t n = write(outfd, br->buf + pos, chunk);
     if (n < 0) {
       if (errno == EINTR) continue;
       return -1;
     }
+
     written += (size_t)n;
   }
+
   return 0;
 }
 
@@ -288,30 +322,13 @@ int stream_copy(int infd, int outfd, flags_t flags) {
     }
   }
   case MODE_BYTES: {
-    printf("entering modes bytes\n");
     size_t want = flags.count.as.bytes;
     bytes_ring_t br = {0};
     bytes_ring_init(&br, want);
     if (br.buf == NULL) return -1;
+    char buf[1024 * 64];
     for (;;) {
-      // read up to end of buf
-      // [1 2 0 0 0]
-      //      ^ start = 2, capacity = 5
-      // read abc
-      // [a b c 0 0]
-      //    start = 0
-      //    length = 3
-      //    write_pos = 3
-      //    capacity = 5
-      // read xyz
-      // [z b c x y]
-      //    start = 1
-      //    length = 5
-      //    write_pos = 1
-      //    capacity = 5
-      size_t write_pos = (br.start + br.length) % br.capacity;
-      size_t to_read = br.capacity - write_pos;
-      ssize_t n = read(infd, br.buf + ((br.start + br.length) % br.capacity), to_read);
+      ssize_t n = read(infd, buf, sizeof(buf));
       if (n < 0) {
         if (errno == EINTR) continue;
         bytes_ring_free(&br);
@@ -325,10 +342,8 @@ int stream_copy(int infd, int outfd, flags_t flags) {
         }
         break;
       }
+      bytes_ring_append(&br, buf, n);
       // update state
-      if ((write_pos + n) % br.capacity > br.start {
-        br.start = 
-      }
     }
 
     bytes_ring_free(&br);
