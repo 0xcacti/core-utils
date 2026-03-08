@@ -98,18 +98,18 @@ static void stack_init(line_stack_t *stack) {
   stack->data = NULL;
 }
 
-static void stack_push(line_stack_t *stack, line_t elem) {
+static int stack_push(line_stack_t *stack, line_t elem) {
   if (stack->len >= stack->capacity) {
     size_t new_cap = stack->capacity == 0 ? 8 : stack->capacity * 2;
     line_t *double_stack = realloc(stack->data, new_cap * sizeof(line_t));
     if (double_stack == NULL) {
-      perror("malloc");
-      exit(2);
+      return -1;
     }
     stack->data = double_stack;
     stack->capacity = new_cap;
   }
   stack->data[stack->len++] = elem;
+  return 0;
 }
 
 static line_t stack_pop(line_stack_t *stack) {
@@ -140,6 +140,10 @@ static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-F | -f | -r] [-qv] [-b number | -c number | -n number] [file ...]\n",
           progname);
   exit(2);
+}
+
+static bool same_file(const struct stat *a, const struct stat *b) {
+  return a->st_dev == b->st_dev && a->st_ino == b->st_ino;
 }
 
 static void parse_err(count_e r, const char *progname, const char *arg) {
@@ -186,6 +190,93 @@ static int write_bytes(int outfd, char *bytes, size_t bytes_len) {
     off += (size_t)n;
   }
   return 0;
+}
+
+static int follow_fd(int fd, int outfd) {
+  if (lseek(fd, 0, SEEK_END) < 0) return -1;
+
+  char buf[64 * 1024];
+  for (;;) {
+    ssize_t n = read(fd, buf, sizeof(buf));
+    if (n > 0) {
+      if (write_bytes(outfd, buf, (size_t)n) < 0) {
+        return -1;
+      }
+      continue;
+    }
+
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) < 0) return -1;
+
+    off_t pos = lseek(fd, 0, SEEK_CUR);
+    if (pos < 0) return -1;
+
+    if (pos > st.st_size) {
+      if (lseek(fd, 0, SEEK_SET) < 0) return -1;
+    }
+
+    sleep(1);
+  }
+}
+
+static int follow_name(const char *path, int *fd, int outfd) {
+  if (lseek(*fd, 0, SEEK_END) < 0) return -1;
+
+  struct stat current;
+  if (fstat(*fd, &current) < 0) return -1;
+
+  char buf[64 * 1024];
+
+  for (;;) {
+    ssize_t n = read(*fd, buf, sizeof(buf));
+    if (n > 0) {
+      if (write_bytes(outfd, buf, (size_t)n) < 0) {
+        return -1;
+      }
+      continue;
+    }
+
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+
+    struct stat path_st;
+    if (stat(path, &path_st) == 0) {
+      if (!same_file(&current, &path_st)) {
+        int newfd = open(path, O_RDONLY);
+        if (newfd >= 0) {
+          if (close(*fd) < 0) {
+            int saved = errno;
+            close(newfd);
+            errno = saved;
+            return -1;
+          }
+          *fd = newfd;
+
+          if (fstat(*fd, &current) < 0) return -1;
+        }
+      }
+    } else if (errno != ENOENT) {
+      return -1;
+    }
+
+    struct stat st;
+    if (fstat(*fd, &st) < 0) return -1;
+
+    off_t pos = lseek(*fd, 0, SEEK_CUR);
+    if (pos < 0) return -1;
+
+    if (pos > st.st_size) {
+      if (lseek(*fd, 0, SEEK_SET) < 0) return -1;
+    }
+    sleep(1);
+  }
 }
 
 static int write_bytes_ring(int outfd, bytes_ring_t *br) {
@@ -242,7 +333,6 @@ int stream_copy(int infd, int outfd, flags_t flags) {
     size_t want = flags.count.as.lines;
     line_stack_t lines = {0};
     stack_init(&lines);
-
     char *carry = NULL;
     size_t carry_len = 0;
 
@@ -250,8 +340,10 @@ int stream_copy(int infd, int outfd, flags_t flags) {
       ssize_t n = read(infd, buf, sizeof(buf));
       if (n < 0) {
         if (errno == EINTR) continue;
+        int saved = errno;
         free(carry);
         stack_free(&lines);
+        errno = saved;
         return -1;
       }
 
@@ -259,15 +351,23 @@ int stream_copy(int infd, int outfd, flags_t flags) {
         if (carry_len > 0) {
           char *line = malloc(carry_len);
           if (line == NULL) {
+            int saved = errno;
             free(carry);
             stack_free(&lines);
+            errno = saved;
             return -1;
           }
           memcpy(line, carry, carry_len);
 
           if (want > 0) {
             if (lines.len == want) stack_drop_oldest(&lines);
-            stack_push(&lines, (line_t){.buf = line, .len = carry_len});
+            if (stack_push(&lines, (line_t){.buf = line, .len = carry_len}) < 0) {
+              int saved = errno;
+              free(carry);
+              stack_free(&lines);
+              errno = saved;
+              return -1;
+            }
           } else {
             free(line);
           }
@@ -287,8 +387,10 @@ int stream_copy(int infd, int outfd, flags_t flags) {
         if (nl == NULL) {
           char *new_carry = realloc(carry, carry_len + remaining);
           if (new_carry == NULL) {
+            int saved = errno;
             free(carry);
             stack_free(&lines);
+            errno = saved;
             return -1;
           }
           carry = new_carry;
@@ -301,8 +403,10 @@ int stream_copy(int infd, int outfd, flags_t flags) {
         size_t line_len = carry_len + seg_len;
         char *line = malloc(line_len);
         if (line == NULL) {
+          int saved = errno;
           free(carry);
           stack_free(&lines);
+          errno = saved;
           return -1;
         }
 
@@ -315,7 +419,13 @@ int stream_copy(int infd, int outfd, flags_t flags) {
 
         if (want > 0) {
           if (lines.len == want) stack_drop_oldest(&lines);
-          stack_push(&lines, (line_t){.buf = line, .len = line_len});
+          if (stack_push(&lines, (line_t){.buf = line, .len = line_len}) < 0) {
+            int saved = errno;
+            free(carry);
+            stack_free(&lines);
+            errno = saved;
+            return -1;
+          }
         } else {
           free(line);
         }
@@ -406,14 +516,13 @@ static ssize_t read_to_buffer(int fd, char *buf, size_t want) {
   return (ssize_t)total;
 }
 
-static void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
+static int prepend(char *prefix, int prefix_len, char **str, size_t *str_len, size_t *str_cap) {
   size_t new_len = *str_len + prefix_len;
   if (new_len + 1 >= *str_cap) {
     size_t new_cap = (new_len + 1) * 2;
     char *new_str = realloc(*str, new_cap);
     if (new_str == NULL) {
-      perror("malloc");
-      exit(EXIT_FAILURE);
+      return -1;
     }
     *str = new_str;
     *str_cap = new_cap;
@@ -422,6 +531,7 @@ static void prepend(char *prefix, int prefix_len, char **str, size_t *str_len, s
   memcpy(*str, prefix, prefix_len);
   *str_len = new_len;
   (*str)[new_len] = '\0';
+  return 0;
 }
 
 static int tail_regular_last_bytes(int infd, int outfd, off_t start, size_t want) {
@@ -455,26 +565,38 @@ static int tail_regular_lines(int fd, flags_t flags) {
   line_stack_t s = {0};
   stack_init(&s);
   off_t end = lseek(fd, 0, SEEK_END);
+  if (end < 0) {
+    stack_free(&s);
+    return -1;
+  }
   off_t pos = end;
 
   size_t carry_cap = BLOCK_SIZE;
   size_t carry_len = 0;
   char *carry = malloc(BLOCK_SIZE);
   if (carry == NULL) {
-    perror("malloc");
-    exit(EXIT_FAILURE);
+    int saved = errno;
+    stack_free(&s);
+    errno = saved;
+    return -1;
   }
 
   if (pos > 0) {
     char last = 0;
     if (lseek(fd, pos - 1, SEEK_SET) < 0) {
-      perror("lseek");
-      exit(EXIT_FAILURE);
+      int saved = errno;
+      free(carry);
+      stack_free(&s);
+      errno = saved;
+      return -1;
     }
     int r = read(fd, &last, 1);
     if (r < 0) {
-      perror("read");
-      exit(EXIT_FAILURE);
+      int saved = errno;
+      free(carry);
+      stack_free(&s);
+      errno = saved;
+      return -1;
     }
     if (r == 1 && last == '\n') {
       carry[0] = '\n';
@@ -487,11 +609,20 @@ static int tail_regular_lines(int fd, flags_t flags) {
   char buf[BLOCK_SIZE];
   while (pos > 0 && have_lines < want) {
     off_t block_start = max(0, pos - BLOCK_SIZE);
-    lseek(fd, block_start, SEEK_SET);
+    if (lseek(fd, block_start, SEEK_SET) < 0) {
+      int saved = errno;
+      free(carry);
+      stack_free(&s);
+      errno = saved;
+      return -1;
+    }
     int n = read(fd, buf, pos - block_start);
     if (n < 0) {
-      perror("read");
-      exit(EXIT_FAILURE);
+      int saved = errno;
+      free(carry);
+      stack_free(&s);
+      errno = saved;
+      return -1;
     }
     pos = block_start;
     int right = n;
@@ -500,14 +631,29 @@ static int tail_regular_lines(int fd, flags_t flags) {
       if (buf[i] == '\n') {
         int start = i + 1;
         int slice_len = right - start;
-        prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap);
+        if (prepend(buf + start, slice_len, &carry, &carry_len, &carry_cap) < 0) {
+          int saved = errno;
+          free(carry);
+          stack_free(&s);
+          errno = saved;
+          return -1;
+        }
         char *line = malloc(carry_len);
         if (line == NULL) {
-          perror("malloc");
-          exit(EXIT_FAILURE);
+          int saved = errno;
+          free(carry);
+          stack_free(&s);
+          errno = saved;
+          return -1;
         }
         memcpy(line, carry, carry_len);
-        stack_push(&s, (line_t){.buf = line, .len = carry_len});
+        if (stack_push(&s, (line_t){.buf = line, .len = carry_len}) < 0) {
+          int saved = errno;
+          free(carry);
+          stack_free(&s);
+          errno = saved;
+          return -1;
+        }
         carry_len = 0;
         right = i + 1;
         have_lines++;
@@ -515,18 +661,33 @@ static int tail_regular_lines(int fd, flags_t flags) {
       }
     }
     if (have_lines < want && right > 0) {
-      prepend(buf, right, &carry, &carry_len, &carry_cap);
+      if (prepend(buf, right, &carry, &carry_len, &carry_cap) < 0) {
+        int saved = errno;
+        free(carry);
+        stack_free(&s);
+        errno = saved;
+        return -1;
+      }
     }
   }
 
   if (have_lines < want && carry_len > 0) {
     char *line = malloc(carry_len);
     if (line == NULL) {
-      perror("malloc");
-      exit(EXIT_FAILURE);
+      int saved = errno;
+      free(carry);
+      stack_free(&s);
+      errno = saved;
+      return -1;
     }
     memcpy(line, carry, carry_len);
-    stack_push(&s, (line_t){.buf = line, .len = carry_len});
+    if (stack_push(&s, (line_t){.buf = line, .len = carry_len}) < 0) {
+      int saved = errno;
+      free(carry);
+      stack_free(&s);
+      errno = saved;
+      return -1;
+    }
     have_lines++;
     carry_len = 0;
   }
@@ -622,6 +783,23 @@ int tail_file(char *progname, char *path, flags_t flags) {
     close(fd);
     exit(2);
   }
+
+  if (flags.follow) {
+    if (follow_fd(fd, STDOUT_FILENO) < 0) {
+      int saved = errno;
+      close(fd);
+      errno = saved;
+      return -1;
+    }
+  }
+  if (flags.super_follow) {
+    if (follow_name(path, &fd, STDOUT_FILENO) < 0) {
+      int saved = errno;
+      close(fd);
+      errno = saved;
+      return -1;
+    }
+  }
   close(fd);
   return 0;
 }
@@ -683,6 +861,11 @@ int main(int argc, char *argv[]) {
 
   if (flags.count.mode != MODE_LINES && flags.reverse) {
     fprintf(stderr, "%s: cannot use -r with bytes or blocks mode\n", argv[0]);
+    exit(2);
+  }
+
+  if ((flags.follow || flags.super_follow) && (argc - optind != 1)) {
+    fprintf(stderr, "%s: -f and -F currently support exactly one file\n", argv[0]);
     exit(2);
   }
 
