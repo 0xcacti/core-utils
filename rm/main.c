@@ -88,7 +88,7 @@ static void delete_argv_at(char **argv, int *argc, int i) {
   argv[*argc] = NULL;
 }
 
-int check(char *path, char *name, struct stat *st) {
+static int check(char *path, char *name, struct stat *st) {
   int ch, first;
   char modep[15];
 
@@ -110,7 +110,7 @@ int check(char *path, char *name, struct stat *st) {
   return (first == 'y' || first == 'Y');
 }
 
-void rm_file(char *path, rm_result_e *result) {
+static void rm_file(char *path, rm_result_e *result) {
   if (result == NULL) exit(1);
   struct stat st = {0};
   if (lstat(path, &st) != 0) {
@@ -156,7 +156,7 @@ void rm_file(char *path, rm_result_e *result) {
   }
 }
 
-void rm_tree(char *path, rm_result_e *result, char *progname) {
+static void rm_tree(char *path, rm_result_e *result, char *progname) {
   *result = OK;
   bool needstat = !flags.f_flag && !flags.i_flag && is_term;
   int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;

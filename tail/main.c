@@ -326,7 +326,7 @@ static int write_lines(int outfd, flags_t flags, line_stack_t *s) {
   return 0;
 }
 
-int stream_copy(int infd, int outfd, flags_t flags) {
+static int stream_copy(int infd, int outfd, flags_t flags) {
   char buf[64 * 1024];
   switch (flags.count.mode) {
   case MODE_LINES: {
@@ -698,7 +698,7 @@ static int tail_regular_lines(int fd, flags_t flags) {
   return r;
 }
 
-int tail_file(char *progname, char *path, flags_t flags) {
+static int tail_file(char *progname, char *path, flags_t flags) {
   int fd = open(path, O_RDONLY);
   if (fd < 0) return -1;
 
