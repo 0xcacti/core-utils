@@ -1,4 +1,6 @@
+#include <errno.h>
 #include <getopt.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +28,15 @@ typedef struct {
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-x] [-h | -k] [-a | -s | -d depth] [file ...]\n", progname);
   exit(2);
+}
+
+static int parse_nonnegative_int(const char *s, const char *progname) {
+  char *end = NULL;
+  errno = 0;
+  long value = strtol(s, &end, 10);
+  if (errno == ERANGE || value < 0 || value > INT_MAX) usage(progname);
+  if (end == s || *end != '\0') usage(progname);
+  return (int)value;
 }
 
 int main(int argc, char **argv) {
@@ -66,7 +77,7 @@ int main(int argc, char **argv) {
       if (print_set) usage(argv[0]);
       print_set = true;
       flags.print_mode = PRINT_MAX_DEPTH;
-      int md = atoi(optarg); // TODO: make more robust
+      int md = parse_nonnegative_int(argv[0], optarg);
       flags.max_depth = md;
       break;
     }
