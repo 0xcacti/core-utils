@@ -1,5 +1,5 @@
 CC := cc
-CFLAGS := -O2 -Wall -Wextra -Wpedantic -Werror -Werror=implicit-function-declaration
+CFLAGS := -O2 -Wall -Wextra -Wpedantic -Werror -Werror=implicit-function-declaration -Wstrict-prototypes -Wmissing-prototypes
 LDFLAGS :=
 LDLIBS :=
 

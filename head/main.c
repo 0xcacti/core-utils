@@ -138,7 +138,7 @@ static int stream_copy(int infd, int outfd, count_t count) {
   return 0;
 }
 
-int head_file(const char *filename, count_t c) {
+static int head_file(const char *filename, count_t c) {
   int fd = open(filename, O_RDONLY);
   if (fd < 0) {
     return -1;

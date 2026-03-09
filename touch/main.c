@@ -24,7 +24,7 @@ static void error_errno(const char *progname, const char *filename) {
   exit(2);
 }
 
-int parse_time_t(char *s, struct timespec *ts) {
+static int parse_time_t(char *s, struct timespec *ts) {
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
   if (t == NULL) return -1;
@@ -86,7 +86,7 @@ int parse_time_t(char *s, struct timespec *ts) {
   return 0;
 }
 
-int parse_time_r(char *ref_file, struct timespec *ts) {
+static int parse_time_r(char *ref_file, struct timespec *ts) {
   struct stat st;
   if (stat(ref_file, &st) != 0) {
     return -1;

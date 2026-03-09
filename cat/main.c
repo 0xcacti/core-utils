@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static void usage() {
+static void usage(void) {
   dprintf(STDERR_FILENO, "Usage: mcat [file ...]\n");
 }
 
@@ -50,7 +50,7 @@ static int stream_copy(int infd, int outfd) {
   }
 }
 
-int cat_file(const char *filename) {
+static int cat_file(const char *filename) {
   if (strcmp(filename, "-") == 0) {
     return stream_copy(STDIN_FILENO, STDOUT_FILENO);
   }
