@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef enum {
   FORMAT_DEFAULT,
@@ -30,6 +31,10 @@ static void usage(const char *progname) {
   exit(2);
 }
 
+static void error_errno(const char *progname, const char *filename) {
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
+}
+
 static int parse_nonnegative_int(const char *s, const char *progname) {
   char *end = NULL;
   errno = 0;
@@ -37,6 +42,10 @@ static int parse_nonnegative_int(const char *s, const char *progname) {
   if (errno == ERANGE || value < 0 || value > INT_MAX) usage(progname);
   if (end == s || *end != '\0') usage(progname);
   return (int)value;
+}
+
+static int du_path(const char *path) {
+  // fts walk
 }
 
 int main(int argc, char **argv) {
@@ -84,5 +93,9 @@ int main(int argc, char **argv) {
     default:
       usage(argv[0]);
     }
+  }
+
+  for (int i = optind; i < argc; i++) {
+    if (du_path(argv[i]) < 0) error_errno(argv[0], argv[i]);
   }
 }
