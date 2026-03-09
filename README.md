@@ -48,7 +48,7 @@ list, but I'm going to stop for now.
 - [x] touch
 - [x] tee
 - [x] rm 
-- [ ] tail
+- [x] tail
 - [ ] du
 - [ ] cp
 - [ ] mv
