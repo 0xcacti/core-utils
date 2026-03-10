@@ -30,6 +30,11 @@ typedef struct {
   int max_depth;
 } flags_t;
 
+typedef struct {
+  long long s;
+  bool active;
+} dirsum_t;
+
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-x] [-h | -k] [-a | -s | -d depth] [file ...]\n", progname);
   exit(2);
@@ -70,33 +75,38 @@ static int du_path(char *path, flags_t flags) {
   enum { SKIPPED = 1 };
 
   FTSENT *ent = NULL;
+  dirsum_t sum = {0};
   while ((ent = fts_read(fts)) != NULL) {
     switch (ent->fts_info) {
     case FTS_DNR: // TODO
       break;
     case FTS_D: {
-      // first handle simple
-      long long sz = simple_block_size(path);
-      if (sz < 0) {
-        int saved = errno;
-        fts_close(fts);
-        errno = saved;
-        return -1;
-      }
-      fprintf(stdout, "%lld %s\n", sz, path);
-    }
-
-    case FTS_DP:
+      sum.s = 0;
+      sum.active = true;
       break;
+    }
+    case FTS_DP: {
+      printf("===== post order traversal %s\n", ent->fts_path);
+      if (sum.active) {
+        fprintf(stdout, "%lld %s\n", sum.s, ent->fts_path);
+      }
+      sum.s = 0;
+      sum.active = false;
+      break;
+    }
     case FTS_F: {
-      long long sz = simple_block_size(path);
+      long long sz = simple_block_size(ent->fts_path);
       if (sz < 0) {
         int saved = errno;
         fts_close(fts);
         errno = saved;
         return -1;
       }
-      fprintf(stdout, "%lld %s\n", sz, path);
+      if (sum.active) sum.s += sz;
+      if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
+        fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
+      }
+      break;
     }
     }
   }
