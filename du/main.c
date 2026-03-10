@@ -48,6 +48,14 @@ static int parse_nonnegative_int(const char *s, const char *progname) {
   return (int)value;
 }
 
+static long long simple_block_size(char *path) {
+
+  struct stat st;
+  int r = stat(path, &st);
+  if (r < 0) return -1;
+  return (long long)st.st_blocks;
+}
+
 static int du_path(char *path, flags_t flags) {
   // fts walk
   int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
@@ -66,19 +74,29 @@ static int du_path(char *path, flags_t flags) {
     switch (ent->fts_info) {
     case FTS_DNR: // TODO
       break;
-    case FTS_D:
-    case FTS_DP:
-      break;
-    case FTS_F: {
-      struct stat st;
-      int r = stat(path, &st);
-      if (r < 0) { // what does du do if it fails
+    case FTS_D: {
+      // first handle simple
+      long long sz = simple_block_size(path);
+      if (sz < 0) {
         int saved = errno;
         fts_close(fts);
         errno = saved;
         return -1;
       }
-      fprintf(stdout, "%lld %s\n", (long long)st.st_blocks, path);
+      fprintf(stdout, "%lld %s\n", sz, path);
+    }
+
+    case FTS_DP:
+      break;
+    case FTS_F: {
+      long long sz = simple_block_size(path);
+      if (sz < 0) {
+        int saved = errno;
+        fts_close(fts);
+        errno = saved;
+        return -1;
+      }
+      fprintf(stdout, "%lld %s\n", sz, path);
     }
     }
   }
