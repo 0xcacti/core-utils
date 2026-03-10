@@ -1,10 +1,14 @@
 #include <errno.h>
+#include <fts.h>
 #include <getopt.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+
+#define BLOCK_SIZE 512
 
 typedef enum {
   FORMAT_DEFAULT,
@@ -44,8 +48,41 @@ static int parse_nonnegative_int(const char *s, const char *progname) {
   return (int)value;
 }
 
-static int du_path(const char *path) {
+static int du_path(char *path, flags_t flags) {
   // fts walk
+  int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
+  if (flags.one_file_system) fts_flags |= FTS_XDEV;
+
+  (void)fts_flags;
+  char *paths[2];
+  paths[0] = path;
+  paths[1] = NULL;
+  FTS *fts = fts_open(paths, fts_flags, NULL);
+  if (fts == NULL) return -1;
+  enum { SKIPPED = 1 };
+
+  FTSENT *ent = NULL;
+  while ((ent = fts_read(fts)) != NULL) {
+    switch (ent->fts_info) {
+    case FTS_DNR: // TODO
+      break;
+    case FTS_D:
+    case FTS_DP:
+      break;
+    case FTS_F: {
+      struct stat st;
+      int r = stat(path, &st);
+      if (r < 0) { // what does du do if it fails
+        int saved = errno;
+        fts_close(fts);
+        errno = saved;
+        return -1;
+      }
+      fprintf(stdout, "%lld %s\n", (long long)st.st_blocks, path);
+    }
+    }
+  }
+  return 0;
 }
 
 int main(int argc, char **argv) {
@@ -96,6 +133,6 @@ int main(int argc, char **argv) {
   }
 
   for (int i = optind; i < argc; i++) {
-    if (du_path(argv[i]) < 0) error_errno(argv[0], argv[i]);
+    if (du_path(argv[i], flags) < 0) error_errno(argv[0], argv[i]);
   }
 }
