@@ -86,7 +86,6 @@ static int du_path(char *path, flags_t flags) {
       break;
     }
     case FTS_DP: {
-      printf("===== post order traversal %s\n", ent->fts_path);
       if (sum.active) {
         fprintf(stdout, "%lld %s\n", sum.s, ent->fts_path);
       }
