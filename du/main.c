@@ -35,6 +35,51 @@ typedef struct {
   bool active;
 } dirsum_t;
 
+typedef struct {
+  size_t len;
+  size_t capacity;
+  dirsum_t *data;
+} dirsum_stack_t;
+
+static void dirsum_stack_init(dirsum_stack_t *ds) {
+  ds->len = 0;
+  ds->capacity = 0;
+  ds->data = NULL;
+}
+
+static int dirsum_stack_push(dirsum_stack_t *ds, dirsum_t d) {
+  // printf("pushing\n");
+  if (ds->len >= ds->capacity) {
+    size_t new_cap = ds->capacity == 0 ? 8 : ds->capacity * 2;
+    dirsum_t *new_data = realloc(ds->data, new_cap * sizeof(dirsum_stack_t));
+    if (!new_data) return -1;
+    ds->data = new_data;
+    ds->capacity = new_cap;
+  }
+  ds->data[ds->len++] = d;
+  return 0;
+}
+
+static dirsum_t dirsum_stack_pop(dirsum_stack_t *ds) {
+  if (ds->len == 0) return (dirsum_t){.s = -1, .active = false};
+  return ds->data[ds->len--];
+}
+
+static dirsum_t dirsum_stack_peek(dirsum_stack_t *ds) {
+  if (ds->len == 0) return (dirsum_t){.s = -1, .active = false};
+  return ds->data[ds->len - 1];
+}
+
+static void dirsum_stack_top_sum(dirsum_stack_t *ds, long long addend) {
+  ds->data[ds->len - 1].s += addend;
+}
+
+static void dirsum_stack_free(dirsum_stack_t *ds) {
+  free(ds->data);
+  ds->len = 0;
+  ds->capacity = 0;
+}
+
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-x] [-h | -k] [-a | -s | -d depth] [file ...]\n", progname);
   exit(2);
@@ -54,10 +99,10 @@ static int parse_nonnegative_int(const char *s, const char *progname) {
 }
 
 static long long simple_block_size(char *path) {
-
   struct stat st;
   int r = stat(path, &st);
   if (r < 0) return -1;
+
   return (long long)st.st_blocks;
 }
 
@@ -75,40 +120,68 @@ static int du_path(char *path, flags_t flags) {
   enum { SKIPPED = 1 };
 
   FTSENT *ent = NULL;
-  dirsum_t sum = {0};
+  dirsum_stack_t ds = {0};
+  dirsum_stack_init(&ds);
   while ((ent = fts_read(fts)) != NULL) {
     switch (ent->fts_info) {
     case FTS_DNR: // TODO
       break;
     case FTS_D: {
-      sum.s = 0;
-      sum.active = true;
+      long long sz = simple_block_size(ent->fts_path);
+      if (sz < 0) {
+        int saved = errno;
+        dirsum_stack_free(&ds);
+        fts_close(fts);
+        errno = saved;
+        return -1;
+      }
+
+      if (dirsum_stack_push(&ds, (dirsum_t){.s = sz, .active = true}) < 0) {
+        int saved = errno;
+        dirsum_stack_free(&ds);
+        fts_close(fts);
+        errno = saved;
+        return -1;
+      }
       break;
     }
     case FTS_DP: {
-      if (sum.active) {
-        fprintf(stdout, "%lld %s\n", sum.s, ent->fts_path);
+      dirsum_t curr = dirsum_stack_pop(&ds);
+      if (curr.s < 0) {
+        int saved = errno;
+        dirsum_stack_free(&ds);
+        fts_close(fts);
+        errno = saved;
+        return -1;
       }
-      sum.s = 0;
-      sum.active = false;
+      fprintf(stdout, "%lld %s\n", curr.s, ent->fts_path);
+      dirsum_stack_top_sum(&ds, curr.s);
       break;
     }
     case FTS_F: {
       long long sz = simple_block_size(ent->fts_path);
       if (sz < 0) {
         int saved = errno;
+        dirsum_stack_free(&ds);
         fts_close(fts);
         errno = saved;
         return -1;
       }
-      if (sum.active) sum.s += sz;
-      if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
-        fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
+      if (dirsum_stack_peek(&ds).s < 0) {
+        if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
+          fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
+        }
+      } else {
+        dirsum_stack_top_sum(&ds, sz);
       }
       break;
     }
+    default:
+      fprintf(stderr, "fts_info=%d path=%s\n", ent->fts_info, ent->fts_path);
     }
   }
+  fts_close(fts);
+  dirsum_stack_free(&ds);
   return 0;
 }
 
