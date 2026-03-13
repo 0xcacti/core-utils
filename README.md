@@ -49,7 +49,7 @@ list, but I'm going to stop for now.
 - [x] tee
 - [x] rm 
 - [x] tail
-- [ ] du
+- [x] du
 - [ ] cp
 - [ ] mv
 - [ ] xargs 
