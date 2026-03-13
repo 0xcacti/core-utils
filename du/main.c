@@ -49,7 +49,6 @@ static void dirsum_stack_init(dirsum_stack_t *ds) {
 }
 
 static int dirsum_stack_push(dirsum_stack_t *ds, dirsum_t d) {
-  // printf("pushing\n");
   if (ds->len >= ds->capacity) {
     size_t new_cap = ds->capacity == 0 ? 8 : ds->capacity * 2;
     dirsum_t *new_data = realloc(ds->data, new_cap * sizeof(dirsum_stack_t));
@@ -152,6 +151,8 @@ static void blocks_to_readable(long long sz, char *buf) {
 }
 
 static void display(FTSENT *ent, long long sz, flags_t flags) {
+  if (flags.print_mode == PRINT_SUMMARY && ent->fts_level != 0) return;
+
   char size[64];
   if (flags.format_mode == FORMAT_KIB) {
     snprintf(size, 64, "%lld", sz / 2);
