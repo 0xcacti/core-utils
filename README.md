@@ -50,6 +50,6 @@ list, but I'm going to stop for now.
 - [x] rm 
 - [x] tail
 - [x] du
-- [ ] cp
 - [ ] mv
+- [ ] cp
 - [ ] xargs 
