@@ -11,7 +11,10 @@ typedef struct {
 } flags_t;
 
 static void usage(const char *progname) {
-  dprintf(STDERR_FILENO, "%s\n", progname);
+  dprintf(STDERR_FILENO,
+          "usage: %s [-f | -i | -n] [-hv] source target\n"
+          "       %s [-f | -i | -n] [-v] source ... directory\n",
+          progname, progname);
   exit(2);
 }
 
