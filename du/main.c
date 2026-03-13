@@ -271,7 +271,6 @@ int main(int argc, char **argv) {
 
   bool format_set = false;
   bool print_set = false;
-  printf("do we get to here1\n");
   while ((ch = getopt(argc, argv, "xhkasd:")) != -1) {
     switch (ch) {
     case 'x':
@@ -310,6 +309,9 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (optind == argc) {
+    if (du_path(".", flags) < 0) error_errno(argv[0], ".");
+  }
   for (int i = optind; i < argc; i++) {
     if (du_path(argv[i], flags) < 0) error_errno(argv[0], argv[i]);
   }
