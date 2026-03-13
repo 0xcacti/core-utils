@@ -107,14 +107,21 @@ static long long simple_block_size(char *path) {
 }
 
 static void display(FTSENT *ent, long long sz, flags_t flags) {
+  long long blocks;
+  if (flags.format_mode == FORMAT_KIB) {
+    blocks = sz / 2;
+  } else {
+    blocks = sz;
+  }
+
   switch (ent->fts_info) {
   case FTS_F:
     if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
-      fprintf(stdout, "%lld\t%s\n", sz, ent->fts_path);
+      fprintf(stdout, "%lld\t%s\n", blocks, ent->fts_path);
     }
     break;
   case FTS_DP:
-    fprintf(stdout, "%lld\t%s\n", sz, ent->fts_path);
+    fprintf(stdout, "%lld\t%s\n", blocks, ent->fts_path);
     break;
   default:
     fprintf(stderr, "unhandled filetype\n");
