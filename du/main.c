@@ -2,6 +2,7 @@
 #include <fts.h>
 #include <getopt.h>
 #include <limits.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,22 +107,65 @@ static long long simple_block_size(char *path) {
   return (long long)st.st_blocks;
 }
 
+// 1 B = 1 bytes
+// 1 KiB = 1024 bytes
+// 1 MiB = 1024 KiB = 1,048,576 bytes
+// 1 GiB = 1024 MiB = 1,073,741,824 bytes
+// 1 TiB = 1024 GiB
+// 1
+static void blocks_to_readable(long long sz, char *buf) {
+  int unit = 0;
+  double size = (double)(sz * BLOCK_SIZE);
+
+  // Check unit < 6 where 5 corresponds to PiB
+  while (size >= 1024 && unit < 6) {
+    size /= 1024;
+    unit++;
+  }
+
+  switch (unit) {
+  case 0:
+    snprintf(buf, sizeof(buf), "%lldB", (long long)floor(size));
+    break;
+  case 1:
+    snprintf(buf, sizeof(buf), "%lldK", (long long)floor(size));
+    break;
+  case 2:
+    snprintf(buf, sizeof(buf), "%lldM", (long long)floor(size));
+    break;
+  case 3:
+    snprintf(buf, sizeof(buf), "%lldG", (long long)floor(size));
+    break;
+  case 4:
+    snprintf(buf, sizeof(buf), "%lldT", (long long)floor(size));
+    break;
+  case 5:
+    snprintf(buf, sizeof(buf), "%lldP", (long long)floor(size));
+    break;
+  default:
+    fprintf(stderr, "unhandled, impossible case\n");
+    exit(1);
+  }
+}
+
 static void display(FTSENT *ent, long long sz, flags_t flags) {
-  long long blocks;
+  char size[64];
   if (flags.format_mode == FORMAT_KIB) {
-    blocks = sz / 2;
+    snprintf(size, 64, "%lld", sz / 2);
+  } else if (flags.format_mode == FORMAT_HUMAN) {
+    blocks_to_readable(sz, size);
   } else {
-    blocks = sz;
+    snprintf(size, 64, "%lld", sz);
   }
 
   switch (ent->fts_info) {
   case FTS_F:
     if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
-      fprintf(stdout, "%lld\t%s\n", blocks, ent->fts_path);
+      fprintf(stdout, "%s\t%s\n", size, ent->fts_path);
     }
     break;
   case FTS_DP:
-    fprintf(stdout, "%lld\t%s\n", blocks, ent->fts_path);
+    fprintf(stdout, "%s\t%s\n", size, ent->fts_path);
     break;
   default:
     fprintf(stderr, "unhandled filetype\n");
