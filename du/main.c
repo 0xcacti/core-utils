@@ -124,14 +124,8 @@ static int du_path(char *path, flags_t flags) {
   dirsum_stack_init(&ds);
   while ((ent = fts_read(fts)) != NULL) {
     switch (ent->fts_info) {
-    case FTS_DNR: // TODO
-      break;
     case FTS_D: {
       long long sz = simple_block_size(ent->fts_path);
-      // for (int i = 0; i < ent->fts_level; i++) {
-      //   printf("\t");
-      // }
-      // printf("entering dir: %s\n", ent->fts_path);
       if (sz < 0) {
         int saved = errno;
         dirsum_stack_free(&ds);
@@ -150,8 +144,6 @@ static int du_path(char *path, flags_t flags) {
       break;
     }
     case FTS_DP: {
-      // printf("ds.len %zu\n", ds.len);
-      // printf("top of stack: %lld\n", ds.data[ds.len - 1].s);
       dirsum_t curr = dirsum_stack_pop(&ds);
       if (curr.s < 0) {
         int saved = errno;
@@ -161,17 +153,11 @@ static int du_path(char *path, flags_t flags) {
         return -1;
       }
       fprintf(stdout, "%lld %s\n", curr.s, ent->fts_path);
-      // printf("top of stack: %lld\n", ds.data[ds.len - 1].s);
       dirsum_stack_top_sum(&ds, curr.s);
       break;
     }
     case FTS_F: {
-
       long long sz = simple_block_size(ent->fts_path);
-      // for (int i = 0; i < ent->fts_level; i++) {
-      //   printf("\t");
-      // }
-      // printf("%s :: %lld\n", ent->fts_path, sz);
       if (sz < 0) {
         int saved = errno;
         dirsum_stack_free(&ds);
@@ -184,15 +170,21 @@ static int du_path(char *path, flags_t flags) {
           fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
         }
       } else {
-
-        // printf("st before: %lld\n", ds.data[ds.len - 1].s);
         dirsum_stack_top_sum(&ds, sz);
-        // printf("st after : %lld\n", ds.data[ds.len - 1].s);
       }
       break;
     }
+    case FTS_DNR: // fails for this directory path, could be modified to simply warn
+    case FTS_ERR:
+    case FTS_NS: {
+      int saved = errno;
+      dirsum_stack_free(&ds);
+      fts_close(fts);
+      errno = saved;
+      return -1;
+    }
     default:
-      printf("W are in the hole zone\n");
+      fprintf(stderr, "unhandled FTS case\n");
     }
   }
   fts_close(fts);
