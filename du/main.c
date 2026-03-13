@@ -309,10 +309,18 @@ int main(int argc, char **argv) {
     }
   }
 
+  int ret = 0;
   if (optind == argc) {
-    if (du_path(".", flags) < 0) error_errno(argv[0], ".");
+    if (du_path(".", flags) < 0) {
+      error_errno(argv[0], ".");
+      ret = 1;
+    }
   }
   for (int i = optind; i < argc; i++) {
-    if (du_path(argv[i], flags) < 0) error_errno(argv[0], argv[i]);
+    if (du_path(argv[i], flags) < 0) {
+      error_errno(argv[0], argv[i]);
+      ret = 1;
+    }
   }
+  return ret;
 }
