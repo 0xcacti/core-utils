@@ -106,9 +106,20 @@ static long long simple_block_size(char *path) {
   return (long long)st.st_blocks;
 }
 
-static void display(flags_t flags, long long sz, char *path) {
-  (void)flags;
-  fprintf(stdout, "%lld\t%s\n", sz, path);
+static void display(FTSENT *ent, long long sz, flags_t flags) {
+  switch (ent->fts_info) {
+  case FTS_F:
+    if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
+      fprintf(stdout, "%lld\t%s\n", sz, ent->fts_path);
+    }
+    break;
+  case FTS_DP:
+    fprintf(stdout, "%lld\t%s\n", sz, ent->fts_path);
+    break;
+  default:
+    fprintf(stderr, "unhandled filetype\n");
+    break;
+  }
 }
 
 static int du_path(char *path, flags_t flags) {
@@ -157,8 +168,7 @@ static int du_path(char *path, flags_t flags) {
         errno = saved;
         return -1;
       }
-      // fprintf(stdout, "%lld %s\n", curr.s, ent->fts_path);
-      display(flags, curr.s, ent->fts_path);
+      display(ent, curr.s, flags);
       dirsum_stack_top_sum(&ds, curr.s);
       break;
     }
@@ -172,10 +182,7 @@ static int du_path(char *path, flags_t flags) {
         return -1;
       }
       if (dirsum_stack_peek(&ds).s < 0) {
-        if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
-          // fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
-          display(flags, sz, ent->fts_path);
-        }
+        display(ent, sz, flags);
       } else {
         dirsum_stack_top_sum(&ds, sz);
       }
