@@ -107,12 +107,6 @@ static long long simple_block_size(char *path) {
   return (long long)st.st_blocks;
 }
 
-// 1 B = 1 bytes
-// 1 KiB = 1024 bytes
-// 1 MiB = 1024 KiB = 1,048,576 bytes
-// 1 GiB = 1024 MiB = 1,073,741,824 bytes
-// 1 TiB = 1024 GiB
-// 1
 static void blocks_to_readable(long long sz, char *buf) {
   int unit = 0;
   double size = (double)(sz * BLOCK_SIZE);
@@ -123,28 +117,37 @@ static void blocks_to_readable(long long sz, char *buf) {
     unit++;
   }
 
+  char *fmt = (unit != 0 && size < 10.0) ? "%.1f%s" : "%lld%s";
+  char *suffix;
+
   switch (unit) {
   case 0:
-    snprintf(buf, sizeof(buf), "%lldB", (long long)floor(size));
+    suffix = "B";
     break;
   case 1:
-    snprintf(buf, sizeof(buf), "%lldK", (long long)floor(size));
+    suffix = "K";
     break;
   case 2:
-    snprintf(buf, sizeof(buf), "%lldM", (long long)floor(size));
+    suffix = "M";
     break;
   case 3:
-    snprintf(buf, sizeof(buf), "%lldG", (long long)floor(size));
+    suffix = "G";
     break;
   case 4:
-    snprintf(buf, sizeof(buf), "%lldT", (long long)floor(size));
+    suffix = "T";
     break;
   case 5:
-    snprintf(buf, sizeof(buf), "%lldP", (long long)floor(size));
+    suffix = "P";
     break;
   default:
     fprintf(stderr, "unhandled, impossible case\n");
     exit(1);
+  }
+
+  if (unit != 0 && size < 10.0) {
+    snprintf(buf, 64, fmt, size, suffix);
+  } else {
+    snprintf(buf, 64, fmt, (long long)floor(size), suffix);
   }
 }
 
