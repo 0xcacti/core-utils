@@ -152,6 +152,7 @@ static void blocks_to_readable(long long sz, char *buf) {
 
 static void display(FTSENT *ent, long long sz, flags_t flags) {
   if (flags.print_mode == PRINT_SUMMARY && ent->fts_level != 0) return;
+  if (flags.print_mode == PRINT_MAX_DEPTH && ent->fts_level > flags.max_depth) return;
 
   char size[64];
   if (flags.format_mode == FORMAT_KIB) {
@@ -270,6 +271,7 @@ int main(int argc, char **argv) {
 
   bool format_set = false;
   bool print_set = false;
+  printf("do we get to here1\n");
   while ((ch = getopt(argc, argv, "xhkasd:")) != -1) {
     switch (ch) {
     case 'x':
@@ -299,7 +301,7 @@ int main(int argc, char **argv) {
       if (print_set) usage(argv[0]);
       print_set = true;
       flags.print_mode = PRINT_MAX_DEPTH;
-      int md = parse_nonnegative_int(argv[0], optarg);
+      int md = parse_nonnegative_int(optarg, argv[0]);
       flags.max_depth = md;
       break;
     }
