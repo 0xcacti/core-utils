@@ -106,6 +106,11 @@ static long long simple_block_size(char *path) {
   return (long long)st.st_blocks;
 }
 
+static void display(flags_t flags, long long sz, char *path) {
+  (void)flags;
+  fprintf(stdout, "%lld\t%s\n", sz, path);
+}
+
 static int du_path(char *path, flags_t flags) {
   // fts walk
   int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
@@ -152,7 +157,8 @@ static int du_path(char *path, flags_t flags) {
         errno = saved;
         return -1;
       }
-      fprintf(stdout, "%lld %s\n", curr.s, ent->fts_path);
+      // fprintf(stdout, "%lld %s\n", curr.s, ent->fts_path);
+      display(flags, curr.s, ent->fts_path);
       dirsum_stack_top_sum(&ds, curr.s);
       break;
     }
@@ -167,7 +173,8 @@ static int du_path(char *path, flags_t flags) {
       }
       if (dirsum_stack_peek(&ds).s < 0) {
         if (ent->fts_level == 0 || flags.print_mode == PRINT_ALL) {
-          fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
+          // fprintf(stdout, "%lld %s\n", sz, ent->fts_path);
+          display(flags, sz, ent->fts_path);
         }
       } else {
         dirsum_stack_top_sum(&ds, sz);
