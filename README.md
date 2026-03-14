@@ -30,12 +30,11 @@ it turns out that building the core utils requires you to know actually
 a lot about unix systems.  I didn't know any of it, and tried not to use 
 AI too too much so it ended up taking me quite a while. 
 
-### A Note 
-Okay, so it turns out some of these core utils are really hard to build.  
-I'm trying to rip no AI.  Getting all the behavior right is really not actually 
-very fun.  I thought this was going to be a simple little project, but it turns
-out that is's an endevour of immense tedium.  I've finised up the following 
-list, but I'm going to stop for now. 
+... 
+
+Turns out building these core utils is really really hard. It's pretty amazingly 
+tough actually.  Getting all the behavior right.  I was going to quit without 
+having finished my list, but I must go on.  
 
 
 ### TODO
