@@ -7,14 +7,15 @@
 #include <sys/stat.h>
 
 typedef struct {
-  int standin;
+  bool force;               //-f
+  bool interact;            // -i
+  bool no_overwrite;        // -n
+  bool verbose;             // -v
+  bool dont_follow_symlink; // -h
 } flags_t;
 
 static void usage(const char *progname) {
-  dprintf(STDERR_FILENO,
-          "usage: %s [-f | -i | -n] [-hv] source target\n"
-          "       %s [-f | -i | -n] [-v] source ... directory\n",
-          progname, progname);
+  dprintf(STDERR_FILENO, "%s\n", progname);
   exit(2);
 }
 
