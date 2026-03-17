@@ -7,8 +7,8 @@
 #include <sys/stat.h>
 
 typedef struct {
-  bool force;               //-f
-  bool interact;            // -i
+  bool force;               // -f
+  bool interactive;         // -i
   bool no_overwrite;        // -n
   bool verbose;             // -v
   bool dont_follow_symlink; // -h
@@ -30,8 +30,23 @@ int main(int argc, char **argv) {
   int ch;
   flags_t flags = {0};
   (void)flags;
-  while ((ch = getopt(argc, argv, "xhkasd:")) != -1) {
+  while ((ch = getopt(argc, argv, "finvh")) != -1) {
     switch (ch) {
+    case 'f':
+      flags.force = true;
+      break;
+    case 'i':
+      flags.interactive = true;
+      break;
+    case 'n':
+      flags.no_overwrite = true;
+      break;
+    case 'v':
+      flags.verbose = true;
+      break;
+    case 'h':
+      flags.dont_follow_symlink = true;
+      break;
     default:
       usage(argv[0]);
     }
@@ -39,7 +54,7 @@ int main(int argc, char **argv) {
 
   int ret = 0;
   if (optind == argc) usage(argv[0]);
-  for (int i = optind; i < argc; i++) {
-  }
+  if (optind + 1 < argc && flags.dont_follow_symlink) usage(argv[0]);
+
   return ret;
 }
