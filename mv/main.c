@@ -53,8 +53,12 @@ int main(int argc, char **argv) {
   }
 
   int ret = 0;
-  if (optind == argc) usage(argv[0]);
-  if (optind + 1 < argc && flags.dont_follow_symlink) usage(argv[0]);
+  int num_args = argc - optind;
+  if (num_args < 2) usage(argv[0]);
+  if (num_args > 2 && flags.dont_follow_symlink) {
+    printf("we in here\n");
+    usage(argv[0]);
+  }
 
   return ret;
 }
