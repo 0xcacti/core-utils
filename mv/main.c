@@ -15,8 +15,11 @@ typedef struct {
   bool dont_follow_symlink; // -h
 } flags_t;
 
-typedef enum { SINGLE_TARGET; }
-MODE_T;
+typedef enum {
+  MODE_EXACT_PATH,
+  MODE_DIRECTORY,
+  MODE_DIRECTORY_NOT_DIR,
+} mode_e;
 
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO,
@@ -30,34 +33,68 @@ static void error_errno(const char *progname, const char *filename) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
 }
 
+static int check_exists(const char *path, bool *exists) {
+  struct stat st;
+  int r = stat(path, &st);
+  if (r == 0) *exists = true;
+  if (r == ENOENT) *exists = false;
+  return -1;
+}
+
+// should work on files that exist
 static int check_is_dir(const char *path, bool *is_dir) {
   struct stat st;
-  if (stat(path, &st) < 0) return -1;
+  int r = stat(path, &st);
+  if (r == ENOENT) return -1;
   *is_dir = S_ISDIR(st.st_mode);
   return 0;
 }
 
-static int check_same_fs(const char *p1, const char *p2, bool *same) {
-  struct stat st1;
-  if (stat(p1, &st1) < 0) return -1;
-  struct stat st2;
-  if (stat(p2, &st2) < 0) return -1;
-
-  *same = st1.st_dev == st2.st_dev;
-  return 0;
-}
+// static int check_same_fs(const char *p1, const char *p2, bool *same) {
+//   struct stat st1;
+//   if (stat(p1, &st1) < 0) return -1;
+//   struct stat st2;
+//   if (stat(p2, &st2) < 0) return -1;
+//
+//   *same = st1.st_dev == st2.st_dev;
+//   return 0;
+// }
 
 // TODO: strip trailing slash
-static int move_to_dest(const char *source, const char *dest) {
-  bool is_dir = false;
-  if (check_is_dir(dest, &is_dir) < 0) return -1;
-  if (is_dir) {
-    char buf[PATH_MAX];
-    if (snprintf(buf, PATH_MAX, "%s/%s", dest, source) < 0) return -1;
-    if (rename(source, buf) < 0) return -1;
-  } else {
-    if (rename(source, dest) < 0) return -1;
+static int try_sfs_move_to_path(const char *source, const char *dest) {
+  if (rename(source, dest) == 0) return 0;
+  if (errno == EXDEV) return -2;
+  return -1;
+}
+
+static int try_sfs_move_to_dir(const char *source, const char *dest) {
+  char buf[PATH_MAX];
+  if (snprintf(buf, PATH_MAX, "%s/%s", dest, source) < 0) return -1;
+  return try_sfs_move_to_path(source, dest);
+}
+
+static int determine_mode(int num_args, const char *path, mode_e *mode) {
+  if (num_args > 2) {
+    bool is_dir;
+    if (check_is_dir(path, &is_dir) < 0) return -1;
+    if (is_dir) {
+      *mode = MODE_DIRECTORY;
+      return 0;
+    } else {
+      *mode = MODE_DIRECTORY_NOT_DIR;
+      return 0;
+    }
   }
+
+  bool exists = false;
+  if (check_exists(path, &exists) < 0) return -1;
+
+  if (exists) {
+    *mode = TARGET_DIRECTORY;
+    return 0;
+  }
+
+  *mode = TARGET_EXACT_PATH;
   return 0;
 }
 
@@ -93,17 +130,43 @@ int main(int argc, char **argv) {
     }
   }
 
-  int ret = 0;
   int num_args = argc - optind;
   if (num_args < 2) usage(argv[0]);
   if (num_args > 2 && flags.dont_follow_symlink) usage(argv[0]);
 
-  bool same_fs = false;
-  if (check_same_fs(argv[optind], argv[optind + 1], &same_fs) < 0) {
-    error_errno(argv[0], argv[optind]);
+  bool is_dir = false;
+  if (check_is_dir(argv[argc - 1], &is_dir) < 0) {
+    error_errno(argv[0], argv[argc - 1]);
+    exit(2);
   }
-  if (move_to_dest(argv[optind], argv[optind + 1]) < 0) {
+
+  if (!is_dir && num_args > 2) {
+    error_errno(argv[0], argv[argc - 1]); // TODO: make this a custom error message
+    exit(2);
+  }
+
+  mode_e mode;
+  if (determine_mode(num_args, argv[argc - 1], &mode) < 0) {
+    error_errno(argv[0], argv[argc - 1]);
+    exit(2);
+  }
+
+  // try same fs
+  int ret = 0;
+  if (is_dir) {
+    ret = try_sfs_move_to_dir(argv[optind], argv[argc - 1]);
+  } else {
+    ret = try_sfs_move_to_path(argv[optind], argv[argc - 1]);
+  }
+
+  switch (ret) {
+  case 0:
+    return 0;
+  case -1:
     error_errno(argv[0], argv[optind]);
+    return -1;
+  case -2:
+    break;
   }
 
   return ret;
