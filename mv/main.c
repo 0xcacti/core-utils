@@ -18,8 +18,13 @@ typedef struct {
 typedef enum {
   MODE_EXACT_PATH,
   MODE_DIRECTORY,
-  MODE_DIRECTORY_NOT_DIR,
 } mode_e;
+
+typedef enum {
+  DEST_NONDIR,
+  DEST_DIR,
+  DEST_MISSING,
+} dest_e;
 
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO,
@@ -73,28 +78,43 @@ static int try_sfs_move_to_dir(const char *source, const char *dest) {
   return try_sfs_move_to_path(source, dest);
 }
 
-static int determine_mode(int num_args, const char *path, mode_e *mode) {
-  if (num_args > 2) {
-    bool is_dir;
-    if (check_is_dir(path, &is_dir) < 0) return -1;
-    if (is_dir) {
-      *mode = MODE_DIRECTORY;
-      return 0;
-    } else {
-      *mode = MODE_DIRECTORY_NOT_DIR;
-      return 0;
-    }
-  }
-
-  bool exists = false;
+static int classify_dest(const char *path, dest_e *dest) {
+  bool exists;
   if (check_exists(path, &exists) < 0) return -1;
-
-  if (exists) {
-    *mode = TARGET_DIRECTORY;
+  if (!exists) {
+    *dest = DEST_MISSING;
     return 0;
   }
 
-  *mode = TARGET_EXACT_PATH;
+  bool is_dir;
+  if (check_is_dir(path, &is_dir) < 0) return -1;
+  if (!is_dir) {
+    *dest = DEST_NONDIR;
+    return 0;
+  }
+
+  *dest = DEST_DIR;
+  return 0;
+}
+
+static int determine_mode(int num_args, const char *path, mode_e *mode) {
+  dest_e dest;
+  if (classify_dest(path, &dest) < 0) return -1;
+  if (num_args > 2) {
+    if (dest != DEST_DIR) {
+      errno = ENOTDIR;
+      return -1;
+    }
+    *mode = MODE_DIRECTORY;
+    return 0;
+  }
+
+  if (dest == DEST_DIR) {
+    *mode = MODE_DIRECTORY;
+    return 0;
+  }
+
+  *mode = MODE_EXACT_PATH;
   return 0;
 }
 
