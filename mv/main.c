@@ -41,16 +41,28 @@ static void error_errno(const char *progname, const char *filename) {
 static int check_exists(const char *path, bool *exists) {
   struct stat st;
   int r = stat(path, &st);
-  if (r == 0) *exists = true;
-  if (r == ENOENT) *exists = false;
+  if (r == 0) {
+    *exists = true;
+    return 0;
+  }
+
+  if (errno == ENOENT) {
+    *exists = false;
+    return 0;
+  }
+
   return -1;
 }
 
-// should work on files that exist
 static int check_is_dir(const char *path, bool *is_dir) {
   struct stat st;
-  int r = stat(path, &st);
-  if (r == ENOENT) return -1;
+  if (stat(path, &st) < 0) {
+    if (errno == ENOENT) {
+      *is_dir = false;
+      return 0;
+    }
+    return -1;
+  }
   *is_dir = S_ISDIR(st.st_mode);
   return 0;
 }
@@ -75,7 +87,7 @@ static int try_sfs_move_to_path(const char *source, const char *dest) {
 static int try_sfs_move_to_dir(const char *source, const char *dest) {
   char buf[PATH_MAX];
   if (snprintf(buf, PATH_MAX, "%s/%s", dest, source) < 0) return -1;
-  return try_sfs_move_to_path(source, dest);
+  return try_sfs_move_to_path(source, buf);
 }
 
 static int classify_dest(const char *path, dest_e *dest) {
@@ -156,30 +168,15 @@ int main(int argc, char **argv) {
 
   mode_e mode;
   if (determine_mode(num_args, argv[argc - 1], &mode) < 0) {
-  }
-
-  bool is_dir = false;
-  if (check_is_dir(argv[argc - 1], &is_dir) < 0) {
-    error_errno(argv[0], argv[argc - 1]);
-    exit(2);
-  }
-
-  if (!is_dir && num_args > 2) {
-    error_errno(argv[0], argv[argc - 1]); // TODO: make this a custom error message
-    exit(2);
-  }
-
-  mode_e mode;
-  if (determine_mode(num_args, argv[argc - 1], &mode) < 0) {
     error_errno(argv[0], argv[argc - 1]);
     exit(2);
   }
 
   // try same fs
   int ret = 0;
-  if (is_dir) {
+  if (mode == MODE_DIRECTORY) {
     ret = try_sfs_move_to_dir(argv[optind], argv[argc - 1]);
-  } else {
+  } else if (mode == MODE_EXACT_PATH) {
     ret = try_sfs_move_to_path(argv[optind], argv[argc - 1]);
   }
 
