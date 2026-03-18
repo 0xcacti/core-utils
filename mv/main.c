@@ -154,6 +154,10 @@ int main(int argc, char **argv) {
   if (num_args < 2) usage(argv[0]);
   if (num_args > 2 && flags.dont_follow_symlink) usage(argv[0]);
 
+  mode_e mode;
+  if (determine_mode(num_args, argv[argc - 1], &mode) < 0) {
+  }
+
   bool is_dir = false;
   if (check_is_dir(argv[argc - 1], &is_dir) < 0) {
     error_errno(argv[0], argv[argc - 1]);
