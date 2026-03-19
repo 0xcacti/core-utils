@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 typedef struct {
   bool force;               // -f
@@ -37,6 +38,10 @@ static void usage(const char *progname) {
 
 static void error_errno(const char *progname, const char *filename) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
+}
+
+static void error_msg(const char *progname, const char *thing, const char *msg) {
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, thing, msg);
 }
 
 static bool has_trailing_slash(const char *path) {
@@ -148,7 +153,6 @@ static int determine_mode(int num_args, const char *path, mode_e *mode) {
 int main(int argc, char **argv) {
   int ch;
   flags_t flags = {0};
-  (void)flags;
   while ((ch = getopt(argc, argv, "finvh")) != -1) {
     switch (ch) {
     case 'f':
@@ -202,7 +206,7 @@ int main(int argc, char **argv) {
       error_errno(argv[0], argv[i]);
     }
     if (r == -2) {
-      // TODO;
+      error_msg(argv[0], "cross-device not yet implemented", argv[i]);
     }
   }
 
