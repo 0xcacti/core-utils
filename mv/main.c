@@ -125,14 +125,15 @@ static int determine_mode(int num_args, const char *path, mode_e *mode) {
     *mode = MODE_DIRECTORY;
     return 0;
   }
-  bool trailing_slash = has_trailing_slash(path);
 
+  bool trailing_slash = has_trailing_slash(path);
   if (trailing_slash) {
-    if (dest == DEST_DIR) {
-      *mode = MODE_DIRECTORY;
-      return 0;
+    if (dest != DEST_DIR) {
+      errno = ENOTDIR;
+      return -1;
     }
     *mode = MODE_DIRECTORY;
+    return 0;
   }
 
   if (dest == DEST_DIR) {
