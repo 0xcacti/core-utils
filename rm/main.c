@@ -92,9 +92,9 @@ static int check(char *path, char *name, struct stat *st) {
   int ch, first;
   char modep[15];
 
-  if (flags.i_flag)
+  if (flags.i_flag) {
     fprintf(stderr, "remove %s? ", path);
-  else {
+  } else {
     if (!is_term || S_ISLNK(st->st_mode)) return 1;
     errno = 0;
     if (access(name, W_OK) == 0) return 1;
