@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <getopt.h>
+#include <libgen.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -67,17 +68,6 @@ static int check_is_dir(const char *path, bool *is_dir) {
   return 0;
 }
 
-// static int check_same_fs(const char *p1, const char *p2, bool *same) {
-//   struct stat st1;
-//   if (stat(p1, &st1) < 0) return -1;
-//   struct stat st2;
-//   if (stat(p2, &st2) < 0) return -1;
-//
-//   *same = st1.st_dev == st2.st_dev;
-//   return 0;
-// }
-
-// TODO: strip trailing slash
 static int try_sfs_move_to_path(const char *source, const char *dest) {
   if (rename(source, dest) == 0) return 0;
   if (errno == EXDEV) return -2;
@@ -85,8 +75,16 @@ static int try_sfs_move_to_path(const char *source, const char *dest) {
 }
 
 static int try_sfs_move_to_dir(const char *source, const char *dest) {
+  size_t len = strlen(source);
+  char source_copy[len + 1];
+  memcpy(source_copy, source, len + 1);
+
+  char *name = basename(source_copy);
+  if (!name) return -1;
+
   char buf[PATH_MAX];
-  if (snprintf(buf, PATH_MAX, "%s/%s", dest, source) < 0) return -1;
+  int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
+  if (n < 0 || n >= PATH_MAX) return -1;
   return try_sfs_move_to_path(source, buf);
 }
 
@@ -174,20 +172,21 @@ int main(int argc, char **argv) {
 
   // try same fs
   int ret = 0;
-  if (mode == MODE_DIRECTORY) {
-    ret = try_sfs_move_to_dir(argv[optind], argv[argc - 1]);
-  } else if (mode == MODE_EXACT_PATH) {
-    ret = try_sfs_move_to_path(argv[optind], argv[argc - 1]);
-  }
+  for (int i = optind; i < argc - 1; i++) {
+    int r = 0;
 
-  switch (ret) {
-  case 0:
-    return 0;
-  case -1:
-    error_errno(argv[0], argv[optind]);
-    return -1;
-  case -2:
-    break;
+    if (mode == MODE_DIRECTORY) {
+      r = try_sfs_move_to_dir(argv[i], argv[argc - 1]);
+    } else if (mode == MODE_EXACT_PATH) {
+      r = try_sfs_move_to_path(argv[i], argv[argc - 1]);
+    }
+    if (r == -1) {
+      ret = 1;
+      error_errno(argv[0], argv[i]);
+    }
+    if (r == -2) {
+      // TODO;
+    }
   }
 
   return ret;
