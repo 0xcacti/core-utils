@@ -80,13 +80,13 @@ static int check_is_dir(const char *path, bool *is_dir) {
   return 0;
 }
 
-static int prompt(FILE *tty, const char *dest, bool *should_overwrite) {
+static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
   fprintf(tty, "overwrite %s? (y/n) [n] ", dest);
   fflush(tty);
   int ch, first;
   first = ch = getchar();
   while (ch != '\n' && ch != EOF) ch = getchar();
-  *should_overwrite = (first == 'y' || first == 'Y');
+  *dont_overwrite = (first == 'n' || first == 'N');
   return 0;
 }
 
@@ -95,16 +95,24 @@ static void confirm_no_overwrite(FILE *tty) {
 }
 
 static int try_sfs_move_to_path(const char *source, const char *dest, flags_t flags) {
+  bool exists;
+  if (check_exists(dest, &exists) < 0) return -1;
 
-  bool should_overwrite = false;
-
-  if (flags.interactive) {
-    FILE *tty = fopen("/dev/tty", "r+");
-    if (tty == NULL) return -1;
-    prompt(tty, dest, &should_overwrite);
-    if (!should_overwrite) {
-      confirm_no_overwrite(tty);
+  if (exists) {
+    if (flags.interactive) {
+      bool dont_overwrite = false;
+      FILE *tty = fopen("/dev/tty", "r+");
+      if (tty == NULL) return -1;
+      prompt(tty, dest, &dont_overwrite);
+      if (dont_overwrite) {
+        confirm_no_overwrite(tty);
+        fclose(tty);
+        return 0;
+      }
+    } else if (flags.no_overwrite) {
       return 0;
+
+    } else if (flags.force) {
     }
   }
 
