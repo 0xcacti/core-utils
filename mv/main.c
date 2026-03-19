@@ -39,6 +39,13 @@ static void error_errno(const char *progname, const char *filename) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
 }
 
+static bool has_trailing_slash(const char *path) {
+  size_t len = strlen(path);
+  if (len == 0) return false;
+  if (strcmp(path, "/") == 0) return false;
+  return path[len - 1] == '/';
+}
+
 static int check_exists(const char *path, bool *exists) {
   struct stat st;
   int r = stat(path, &st);
@@ -117,6 +124,15 @@ static int determine_mode(int num_args, const char *path, mode_e *mode) {
     }
     *mode = MODE_DIRECTORY;
     return 0;
+  }
+  bool trailing_slash = has_trailing_slash(path);
+
+  if (trailing_slash) {
+    if (dest == DEST_DIR) {
+      *mode = MODE_DIRECTORY;
+      return 0;
+    }
+    *mode = MODE_DIRECTORY;
   }
 
   if (dest == DEST_DIR) {
