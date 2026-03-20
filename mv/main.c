@@ -84,14 +84,14 @@ static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
   fprintf(tty, "overwrite %s? (y/n) [n] ", dest);
   fflush(tty);
   int ch, first;
-  first = ch = getchar();
+  first = ch = fgetc(tty);
   while (ch != '\n' && ch != EOF) ch = getchar();
   *dont_overwrite = (first == 'n' || first == 'N');
   return 0;
 }
 
 static void confirm_no_overwrite(FILE *tty) {
-  fwrite("not overwritten\n", 1, 17, tty);
+  fwrite("not overwritten\n", 1, 16, tty);
 }
 
 static int try_sfs_move_to_path(const char *source, const char *dest, flags_t flags) {
@@ -109,10 +109,11 @@ static int try_sfs_move_to_path(const char *source, const char *dest, flags_t fl
         fclose(tty);
         return 0;
       }
+      fclose(tty);
     } else if (flags.no_overwrite) {
       return 0;
-
     } else if (flags.force) {
+      // Intentionally empty - rename by default is via force
     }
   }
 
@@ -122,7 +123,6 @@ static int try_sfs_move_to_path(const char *source, const char *dest, flags_t fl
 }
 
 static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
-  (void)flags;
   size_t len = strlen(source);
   char source_copy[len + 1];
   memcpy(source_copy, source, len + 1);
