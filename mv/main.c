@@ -117,7 +117,10 @@ static int try_sfs_move_to_path(const char *source, const char *dest, flags_t fl
     }
   }
 
-  if (rename(source, dest) == 0) return 0;
+  if (rename(source, dest) == 0) {
+    if (flags.verbose) fprintf(stdout, "%s -> %s\n", source, dest);
+    return 0;
+  }
   if (errno == EXDEV) return -2;
   return -1;
 }
