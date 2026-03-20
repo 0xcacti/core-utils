@@ -116,7 +116,7 @@ static int try_sfs_move_to_path(const char *source, const char *dest, flags_t fl
     if (flags.interactive) {
       bool dont_overwrite = false;
       FILE *tty = fopen("/dev/tty", "r+");
-      if (tty == NULL) return -1;
+      if (tty == NULL) return -2;
       prompt(tty, dest, &dont_overwrite);
       if (dont_overwrite) {
         confirm_no_overwrite(tty);
@@ -135,7 +135,7 @@ static int try_sfs_move_to_path(const char *source, const char *dest, flags_t fl
     if (flags.verbose) fprintf(stdout, "%s -> %s\n", source, dest);
     return 0;
   }
-  if (errno == EXDEV) return -2;
+  if (errno == EXDEV) return -3;
   return -1;
 }
 
@@ -244,7 +244,6 @@ int main(int argc, char **argv) {
     exit(2);
   }
 
-  // try same fs
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
     int r = 0;
@@ -259,7 +258,12 @@ int main(int argc, char **argv) {
       error_errno(argv[0], argv[i]);
     }
     if (r == -2) {
+      ret = 1;
+      error_msg(argv[0], "failed to open", "/dev/tty");
+    }
+    if (r == -3) {
       error_msg(argv[0], "cross-device not yet implemented", argv[i]);
+      ret = 1;
     }
   }
 
