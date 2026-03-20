@@ -50,5 +50,9 @@ having finished my list, but I must go on.
 - [x] tail
 - [x] du
 - [ ] mv
+    - [ ] Fix misleading errno/filename on snprintf overflow in try_sfs_move_to_dir
+    - [ ] Fix misleading errno/filename on basename failure in try_sfs_move_to_dir
+    - [ ] Combine check_exists + check_is_dir into a single stat call to eliminate the TOCTOU race
+    - [ ] Handle source == dest
 - [ ] cp
 - [ ] xargs 
