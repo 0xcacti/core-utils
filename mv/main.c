@@ -51,9 +51,15 @@ static bool has_trailing_slash(const char *path) {
   return path[len - 1] == '/';
 }
 
-static int check_exists(const char *path, bool *exists) {
+static int check_exists(const char *path, bool *exists, flags_t flags) {
   struct stat st;
-  int r = stat(path, &st);
+  int r;
+  if (!flags.dont_follow_symlink) {
+    r = stat(path, &st);
+  } else {
+    r = lstat(path, &st);
+  }
+
   if (r == 0) {
     *exists = true;
     return 0;
@@ -67,9 +73,17 @@ static int check_exists(const char *path, bool *exists) {
   return -1;
 }
 
-static int check_is_dir(const char *path, bool *is_dir) {
+static int check_is_dir(const char *path, bool *is_dir, flags_t flags) {
   struct stat st;
-  if (stat(path, &st) < 0) {
+
+  int r;
+  if (!flags.dont_follow_symlink) {
+    r = stat(path, &st);
+  } else {
+    r = lstat(path, &st);
+  }
+
+  if (r < 0) {
     if (errno == ENOENT) {
       *is_dir = false;
       return 0;
@@ -85,7 +99,7 @@ static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
   fflush(tty);
   int ch, first;
   first = ch = fgetc(tty);
-  while (ch != '\n' && ch != EOF) ch = getchar();
+  while (ch != '\n' && ch != EOF) ch = fgetc(tty);
   *dont_overwrite = (first == 'n' || first == 'N');
   return 0;
 }
@@ -96,7 +110,7 @@ static void confirm_no_overwrite(FILE *tty) {
 
 static int try_sfs_move_to_path(const char *source, const char *dest, flags_t flags) {
   bool exists;
-  if (check_exists(dest, &exists) < 0) return -1;
+  if (check_exists(dest, &exists, flags) < 0) return -1;
 
   if (exists) {
     if (flags.interactive) {
@@ -139,16 +153,16 @@ static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t fla
   return try_sfs_move_to_path(source, buf, flags);
 }
 
-static int classify_dest(const char *path, dest_e *dest) {
+static int classify_dest(const char *path, dest_e *dest, flags_t flags) {
   bool exists;
-  if (check_exists(path, &exists) < 0) return -1;
+  if (check_exists(path, &exists, flags) < 0) return -1;
   if (!exists) {
     *dest = DEST_MISSING;
     return 0;
   }
 
   bool is_dir;
-  if (check_is_dir(path, &is_dir) < 0) return -1;
+  if (check_is_dir(path, &is_dir, flags) < 0) return -1;
   if (!is_dir) {
     *dest = DEST_NONDIR;
     return 0;
@@ -158,9 +172,9 @@ static int classify_dest(const char *path, dest_e *dest) {
   return 0;
 }
 
-static int determine_mode(int num_args, const char *path, mode_e *mode) {
+static int determine_mode(int num_args, const char *path, mode_e *mode, flags_t flags) {
   dest_e dest;
-  if (classify_dest(path, &dest) < 0) return -1;
+  if (classify_dest(path, &dest, flags) < 0) return -1;
   if (num_args > 2) {
     if (dest != DEST_DIR) {
       errno = ENOTDIR;
@@ -225,7 +239,7 @@ int main(int argc, char **argv) {
   if (num_args > 2 && flags.dont_follow_symlink) usage(argv[0]);
 
   mode_e mode;
-  if (determine_mode(num_args, argv[argc - 1], &mode) < 0) {
+  if (determine_mode(num_args, argv[argc - 1], &mode, flags) < 0) {
     error_errno(argv[0], argv[argc - 1]);
     exit(2);
   }
