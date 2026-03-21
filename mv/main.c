@@ -51,7 +51,7 @@ static bool has_trailing_slash(const char *path) {
   return path[len - 1] == '/';
 }
 
-static int check_exists(const char *path, bool *exists, flags_t flags) {
+static int check(const char *path, bool *exists, bool *is_dir, flags_t flags) {
   struct stat st;
   int r;
   if (!flags.dont_follow_symlink) {
@@ -61,37 +61,18 @@ static int check_exists(const char *path, bool *exists, flags_t flags) {
   }
 
   if (r == 0) {
+    *is_dir = S_ISDIR(st.st_mode);
     *exists = true;
     return 0;
   }
 
   if (errno == ENOENT) {
     *exists = false;
+    *is_dir = false;
     return 0;
   }
 
   return -1;
-}
-
-static int check_is_dir(const char *path, bool *is_dir, flags_t flags) {
-  struct stat st;
-
-  int r;
-  if (!flags.dont_follow_symlink) {
-    r = stat(path, &st);
-  } else {
-    r = lstat(path, &st);
-  }
-
-  if (r < 0) {
-    if (errno == ENOENT) {
-      *is_dir = false;
-      return 0;
-    }
-    return -1;
-  }
-  *is_dir = S_ISDIR(st.st_mode);
-  return 0;
 }
 
 static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
@@ -109,8 +90,9 @@ static void confirm_no_overwrite(FILE *tty) {
 }
 
 static int try_sfs_move_to_path(const char *source, const char *dest, flags_t flags) {
+  bool is_dir;
   bool exists;
-  if (check_exists(dest, &exists, flags) < 0) return -1;
+  if (check(dest, &exists, &is_dir, flags) < 0) return -1;
 
   if (exists) {
     if (flags.interactive) {
@@ -145,24 +127,28 @@ static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t fla
   memcpy(source_copy, source, len + 1);
 
   char *name = basename(source_copy);
-  if (!name) return -1;
+  if (!name) {
+    errno = EINVAL;
+    return -1;
+  }
 
   char buf[PATH_MAX];
   int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
-  if (n < 0 || n >= PATH_MAX) return -1;
+  if (n < 0 || n >= PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
   return try_sfs_move_to_path(source, buf, flags);
 }
 
 static int classify_dest(const char *path, dest_e *dest, flags_t flags) {
   bool exists;
-  if (check_exists(path, &exists, flags) < 0) return -1;
+  bool is_dir;
+  if (check(path, &exists, &is_dir, flags) < 0) return -1;
   if (!exists) {
     *dest = DEST_MISSING;
     return 0;
   }
-
-  bool is_dir;
-  if (check_is_dir(path, &is_dir, flags) < 0) return -1;
   if (!is_dir) {
     *dest = DEST_NONDIR;
     return 0;
@@ -259,7 +245,7 @@ int main(int argc, char **argv) {
     }
     if (r == -2) {
       ret = 1;
-      error_msg(argv[0], "failed to open", "/dev/tty");
+      error_msg(argv[0], "/dev/tty", "failed to open");
     }
     if (r == -3) {
       error_msg(argv[0], "cross-device not yet implemented", argv[i]);
