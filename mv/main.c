@@ -141,6 +141,62 @@ static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t fla
   return try_sfs_move_to_path(source, buf, flags);
 }
 
+static int copy_file_cross_dest(const char *source, const char *dest) {
+  FILE *s_file = fopen(source);
+}
+
+static int try_dfs_move_to_path(const char *source, const char *dest, flags_t flags) {
+  bool is_dir;
+  bool exists;
+  if (check(dest, &exists, &is_dir, flags) < 0) return -1;
+
+  if (exists) {
+    if (flags.interactive) {
+      bool dont_overwrite = false;
+      FILE *tty = fopen("/dev/tty", "r+");
+      if (tty == NULL) return -2;
+      prompt(tty, dest, &dont_overwrite);
+      if (dont_overwrite) {
+        confirm_no_overwrite(tty);
+        fclose(tty);
+        return 0;
+      }
+      fclose(tty);
+    } else if (flags.no_overwrite) {
+      return 0;
+    } else if (flags.force) {
+      // Intentionally empty - rename by default is via force
+    }
+  }
+
+  if (rename(source, dest) == 0) {
+    if (flags.verbose) fprintf(stdout, "%s -> %s\n", source, dest);
+    return 0;
+  }
+  if (errno == EXDEV) return -3;
+  return -1;
+}
+
+// static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
+//   size_t len = strlen(source);
+//   char source_copy[len + 1];
+//   memcpy(source_copy, source, len + 1);
+//
+//   char *name = basename(source_copy);
+//   if (!name) {
+//     errno = EINVAL;
+//     return -1;
+//   }
+//
+//   char buf[PATH_MAX];
+//   int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
+//   if (n < 0 || n >= PATH_MAX) {
+//     errno = ENAMETOOLONG;
+//     return -1;
+//   }
+//   return try_sfs_move_to_path(source, buf, flags);
+// }
+
 static int classify_dest(const char *path, dest_e *dest, flags_t flags) {
   bool exists;
   bool is_dir;
