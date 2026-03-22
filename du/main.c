@@ -183,7 +183,6 @@ static int du_path(char *path, flags_t flags) {
   int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
   if (flags.one_file_system) fts_flags |= FTS_XDEV;
 
-  (void)fts_flags;
   char *paths[2];
   paths[0] = path;
   paths[1] = NULL;

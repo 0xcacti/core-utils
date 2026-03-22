@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <fts.h>
 #include <getopt.h>
 #include <libgen.h>
 #include <limits.h>
@@ -255,25 +256,81 @@ static move_result_e try_dfs_move_to_path(const char *source, const char *dest, 
   return MOVE_ERRNO;
 }
 
-// static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
-//   size_t len = strlen(source);
-//   char source_copy[len + 1];
-//   memcpy(source_copy, source, len + 1);
-//
-//   char *name = basename(source_copy);
-//   if (!name) {
-//     errno = EINVAL;
-//     return -1;
-//   }
-//
-//   char buf[PATH_MAX];
-//   int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
-//   if (n < 0 || n >= PATH_MAX) {
-//     errno = ENAMETOOLONG;
-//     return -1;
-//   }
-//   return try_sfs_move_to_path(source, buf, flags);
-// }
+static move_result_e try_dfs_file_to_dir(const char *source, const char *dest, flags_t flags) {
+  size_t len = strlen(source);
+  char source_copy[len + 1];
+  memcpy(source_copy, source, len + 1);
+
+  char *name = basename(source_copy);
+  if (!name) {
+    errno = EINVAL;
+    return MOVE_ERRNO;
+  }
+
+  char buf[PATH_MAX];
+  int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
+  if (n < 0 || n >= PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return MOVE_ERRNO;
+  }
+
+  return try_dfs_move_to_path(source, buf, flags);
+}
+
+static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, flags_t flags) {
+
+  int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
+  char *paths[2];
+  paths[0] = (char *)source;
+  paths[1] = NULL;
+  FTS *fts = fts_open(paths, fts_flags, NULL);
+  if (fts == NULL) return MOVE_ERRNO;
+  FTSENT *ent = NULL;
+  while ((ent = fts_read(fts)) != NULL) {
+    switch (ent->fts_info) {
+    case FTS_D: {
+      const char *rel = ent->fts_path + strlen(source);
+      char buf[PATH_MAX];
+      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+      if (mkdir(buf, ent->fts_statp->st_mode) < 0 && errno != EEXIST) {
+        fts_close(fts);
+        return MOVE_ERRNO;
+      }
+      break;
+    }
+    case FTS_DP: {
+      break;
+    }
+    case FTS_F: {
+      const char *rel = ent->fts_path + strlen(source);
+      char buf[PATH_MAX];
+      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+      return try_dfs_move_to_path(
+      break;
+    }
+    case FTS_DNR:
+    case FTS_ERR:
+    case FTS_NS: {
+      int saved = errno;
+      fts_close(fts);
+      errno = saved;
+      return -1;
+    }
+    }
+  }
+
+  return MOVE_OK;
+}
+
+static move_result_e try_dfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
+  bool is_dir, exists;
+  if (check(source, &exists, &is_dir, flags) < 0) return MOVE_ERRNO;
+  if (is_dir) {
+    return try_dfs_dir_to_dir(source, dest, flags);
+  } else {
+    return try_dfs_file_to_dir(source, dest, flags);
+  }
+}
 
 static int classify_dest(const char *path, dest_e *dest, flags_t flags) {
   bool exists;
@@ -338,14 +395,14 @@ static move_result_e move_one(const char *source, const char *dest, mode_e mode,
 
   switch (mode) {
   case MODE_DIRECTORY:
-    // TODO
+    res = try_dfs_move_to_dir(source, dest, flags);
     break;
   case MODE_EXACT_PATH:
     res = try_dfs_move_to_path(source, dest, flags);
     break;
   }
 
-  return MOVE_OK;
+  return res;
 }
 
 int main(int argc, char **argv) {
