@@ -142,7 +142,7 @@ static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t fla
 }
 
 static int copy_file_cross_dest(const char *source, const char *dest) {
-  FILE *s_file = fopen(source);
+  FILE *s_file = fopen(source, "r");
 }
 
 static int try_dfs_move_to_path(const char *source, const char *dest, flags_t flags) {
