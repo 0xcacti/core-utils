@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <libgen.h>
 #include <limits.h>
@@ -27,6 +28,13 @@ typedef enum {
   DEST_DIR,
   DEST_MISSING,
 } dest_e;
+
+typedef enum {
+  MOVE_OK,
+  MOVE_ERRNO,
+  MOVE_TTY_OPEN,
+  MOVE_EXDEV,
+} move_result_e;
 
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO,
@@ -89,25 +97,25 @@ static void confirm_no_overwrite(FILE *tty) {
   fwrite("not overwritten\n", 1, 16, tty);
 }
 
-static int try_sfs_move_to_path(const char *source, const char *dest, flags_t flags) {
+static move_result_e try_sfs_move_to_path(const char *source, const char *dest, flags_t flags) {
   bool is_dir;
   bool exists;
-  if (check(dest, &exists, &is_dir, flags) < 0) return -1;
+  if (check(dest, &exists, &is_dir, flags) < 0) return MOVE_ERRNO;
 
   if (exists) {
     if (flags.interactive) {
       bool dont_overwrite = false;
       FILE *tty = fopen("/dev/tty", "r+");
-      if (tty == NULL) return -2;
+      if (tty == NULL) return MOVE_TTY_OPEN;
       prompt(tty, dest, &dont_overwrite);
       if (dont_overwrite) {
         confirm_no_overwrite(tty);
         fclose(tty);
-        return 0;
+        return MOVE_OK;
       }
       fclose(tty);
     } else if (flags.no_overwrite) {
-      return 0;
+      return MOVE_OK;
     } else if (flags.force) {
       // Intentionally empty - rename by default is via force
     }
@@ -115,13 +123,13 @@ static int try_sfs_move_to_path(const char *source, const char *dest, flags_t fl
 
   if (rename(source, dest) == 0) {
     if (flags.verbose) fprintf(stdout, "%s -> %s\n", source, dest);
-    return 0;
+    return MOVE_OK;
   }
-  if (errno == EXDEV) return -3;
-  return -1;
+  if (errno == EXDEV) return MOVE_EXDEV;
+  return MOVE_ERRNO;
 }
 
-static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
+static move_result_e try_sfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
   size_t len = strlen(source);
   char source_copy[len + 1];
   memcpy(source_copy, source, len + 1);
@@ -129,52 +137,87 @@ static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t fla
   char *name = basename(source_copy);
   if (!name) {
     errno = EINVAL;
-    return -1;
+    return MOVE_ERRNO;
   }
 
   char buf[PATH_MAX];
   int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
   if (n < 0 || n >= PATH_MAX) {
     errno = ENAMETOOLONG;
-    return -1;
+    return MOVE_ERRNO;
   }
   return try_sfs_move_to_path(source, buf, flags);
 }
 
 static int copy_file_cross_dest(const char *source, const char *dest) {
-  FILE *s_file = fopen(source, "r");
+  int src = open(source, O_RDONLY);
+  if (src < 0) return -1;
+  int dst = open(dest, O_RDWR | O_CREAT | O_TRUNC);
+  if (dst < 0) {
+    int saved = errno;
+    close(src);
+    errno = saved;
+    return -1;
+  }
+
+  char buf[64 * 1024];
+  for (;;) {
+    size_t n = read(src, buf, sizeof(buf));
+    if (n == 0) break;
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      int saved = errno;
+      close(src);
+      close(dst);
+      errno = saved;
+      return -1;
+    }
+
+    ssize_t m = write(dst, buf, n);
+    if (m < 0) {
+      if (m == EINTR) continue;
+      int saved = errno;
+      close(src);
+      close(dst);
+      errno = saved;
+      return -1;
+    }
+  }
+
+  close(src);
+  close(dst);
+  return 0;
 }
 
-static int try_dfs_move_to_path(const char *source, const char *dest, flags_t flags) {
+static move_result_e try_dfs_move_to_path(const char *source, const char *dest, flags_t flags) {
   bool is_dir;
   bool exists;
-  if (check(dest, &exists, &is_dir, flags) < 0) return -1;
+  if (check(dest, &exists, &is_dir, flags) < 0) return MOVE_ERRNO;
 
   if (exists) {
     if (flags.interactive) {
       bool dont_overwrite = false;
       FILE *tty = fopen("/dev/tty", "r+");
-      if (tty == NULL) return -2;
+      if (tty == NULL) return MOVE_TTY_OPEN;
       prompt(tty, dest, &dont_overwrite);
       if (dont_overwrite) {
         confirm_no_overwrite(tty);
         fclose(tty);
-        return 0;
+        return MOVE_OK;
       }
       fclose(tty);
     } else if (flags.no_overwrite) {
-      return 0;
+      return MOVE_OK;
     } else if (flags.force) {
       // Intentionally empty - rename by default is via force
     }
   }
 
-  if (rename(source, dest) == 0) {
+  if (copy_file_cross_dest(source, dest) == 0) {
     if (flags.verbose) fprintf(stdout, "%s -> %s\n", source, dest);
-    return 0;
+    return MOVE_OK;
   }
-  if (errno == EXDEV) return -3;
-  return -1;
+  return MOVE_ERRNO;
 }
 
 // static int try_sfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
@@ -245,6 +288,31 @@ static int determine_mode(int num_args, const char *path, mode_e *mode, flags_t 
   return 0;
 }
 
+static move_result_e move_one(const char *source, const char *dest, mode_e mode, flags_t flags) {
+  move_result_e res;
+  switch (mode) {
+  case MODE_DIRECTORY:
+    res = try_sfs_move_to_dir(source, dest, flags);
+    break;
+  case MODE_EXACT_PATH:
+    res = try_sfs_move_to_path(source, dest, flags);
+    break;
+  }
+
+  if (res != EXDEV) return res;
+
+  switch (mode) {
+  case MODE_DIRECTORY:
+    // TODO
+    break;
+  case MODE_EXACT_PATH:
+    res = try_dfs_move_to_path(source, dest, flags);
+    break;
+  }
+
+  return MOVE_OK;
+}
+
 int main(int argc, char **argv) {
   int ch;
   flags_t flags = {0};
@@ -288,24 +356,15 @@ int main(int argc, char **argv) {
 
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
-    int r = 0;
 
-    if (mode == MODE_DIRECTORY) {
-      r = try_sfs_move_to_dir(argv[i], argv[argc - 1], flags);
-    } else if (mode == MODE_EXACT_PATH) {
-      r = try_sfs_move_to_path(argv[i], argv[argc - 1], flags);
-    }
-    if (r == -1) {
-      ret = 1;
+    move_result_e res = move_one(argv[i], argv[argc - 1], mode, flags);
+    if (res == MOVE_OK) continue;
+
+    ret = 1;
+    if (res == MOVE_ERRNO) {
       error_errno(argv[0], argv[i]);
-    }
-    if (r == -2) {
-      ret = 1;
+    } else if (res == MOVE_TTY_OPEN) {
       error_msg(argv[0], "/dev/tty", "failed to open");
-    }
-    if (r == -3) {
-      error_msg(argv[0], "cross-device not yet implemented", argv[i]);
-      ret = 1;
     }
   }
 
