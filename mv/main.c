@@ -152,10 +152,29 @@ static move_result_e try_sfs_move_to_dir(const char *source, const char *dest, f
 static int copy_file_cross_dest(const char *source, const char *dest) {
   int src = open(source, O_RDONLY);
   if (src < 0) return -1;
-  int dst = open(dest, O_RDWR | O_CREAT | O_TRUNC);
+
+  struct stat st;
+  int r = stat(source, &st);
+  if (r < 0 && errno != ENOENT) {
+    int saved = errno;
+    close(src);
+    errno = saved;
+    return -1;
+  }
+
+  int dst = open(dest, O_RDWR | O_CREAT | O_TRUNC, st.st_mode);
   if (dst < 0) {
     int saved = errno;
     close(src);
+    errno = saved;
+    return -1;
+  }
+
+  r = chmod(dest, st.st_mode);
+  if (r < 0) {
+    int saved = errno;
+    close(src);
+    close(dst);
     errno = saved;
     return -1;
   }
@@ -299,7 +318,9 @@ static move_result_e move_one(const char *source, const char *dest, mode_e mode,
     break;
   }
 
-  if (res != EXDEV) return res;
+  printf("do we make it to here?L?I?N?D?S?A?Y?\n");
+  if (res != MOVE_EXDEV) return res;
+  printf("we make it to here\n");
 
   switch (mode) {
   case MODE_DIRECTORY:
@@ -357,6 +378,7 @@ int main(int argc, char **argv) {
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
 
+    printf("we make it to here!!\n");
     move_result_e res = move_one(argv[i], argv[argc - 1], mode, flags);
     if (res == MOVE_OK) continue;
 
