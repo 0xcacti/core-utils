@@ -170,9 +170,10 @@ static int copy_file_cross_dest(const char *source, const char *dest) {
     return -1;
   }
 
-  r = chmod(dest, st.st_mode);
+  r = unlink(source);
   if (r < 0) {
     int saved = errno;
+    unlink(dest);
     close(src);
     close(dst);
     errno = saved;
@@ -201,6 +202,21 @@ static int copy_file_cross_dest(const char *source, const char *dest) {
       errno = saved;
       return -1;
     }
+  }
+
+  struct timespec times[2] = {
+      st.st_atimespec,
+      st.st_mtimespec,
+  };
+
+  r = utimensat(AT_FDCWD, dest, times, 0);
+  if (r < 0) {
+    int saved = errno;
+    unlink(dest);
+    close(src);
+    close(dst);
+    errno = saved;
+    return -1;
   }
 
   close(src);
