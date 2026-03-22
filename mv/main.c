@@ -278,7 +278,6 @@ static move_result_e try_dfs_file_to_dir(const char *source, const char *dest, f
 }
 
 static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, flags_t flags) {
-
   int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
   char *paths[2];
   paths[0] = (char *)source;
@@ -286,6 +285,8 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
   FTS *fts = fts_open(paths, fts_flags, NULL);
   if (fts == NULL) return MOVE_ERRNO;
   FTSENT *ent = NULL;
+
+  bool had_error = false;
   while ((ent = fts_read(fts)) != NULL) {
     switch (ent->fts_info) {
     case FTS_D: {
@@ -293,33 +294,83 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
       char buf[PATH_MAX];
       snprintf(buf, PATH_MAX, "%s%s", dest, rel);
       if (mkdir(buf, ent->fts_statp->st_mode) < 0 && errno != EEXIST) {
-        fts_close(fts);
-        return MOVE_ERRNO;
+        had_error = true;
       }
       break;
     }
     case FTS_DP: {
+      const char *rel = ent->fts_path + strlen(source);
+      char buf[PATH_MAX];
+      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+
+      struct timespec times[2] = {
+          ent->fts_statp->st_atimespec,
+          ent->fts_statp->st_mtimespec,
+      };
+
+      if (utimensat(AT_FDCWD, buf, times, 0) < 0) {
+        had_error = true;
+        break;
+      }
+
+      if (rmdir(ent->fts_accpath) < 0) {
+        had_error = true;
+        break;
+      }
       break;
     }
     case FTS_F: {
       const char *rel = ent->fts_path + strlen(source);
       char buf[PATH_MAX];
       snprintf(buf, PATH_MAX, "%s%s", dest, rel);
-      return try_dfs_move_to_path(
+      if (try_dfs_move_to_path(ent->fts_path, buf, flags) != MOVE_OK) {
+        had_error = true;
+      }
+      break;
+    }
+
+    case FTS_SL: {
+      char target[PATH_MAX];
+      ssize_t len = readlink(ent->fts_path, target, sizeof(target) - 1);
+      if (len < 0) {
+        had_error = true;
+        break;
+      }
+      target[len] = '\0';
+
+      const char *rel = ent->fts_path + strlen(source);
+      char buf[PATH_MAX];
+      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+
+      if (symlink(target, buf) < 0) {
+        had_error = true;
+        break;
+      }
+
+      if (unlink(ent->fts_path) < 0) {
+        had_error = true;
+        break;
+      }
+
       break;
     }
     case FTS_DNR:
     case FTS_ERR:
     case FTS_NS: {
-      int saved = errno;
+      int saved = ent->fts_errno;
       fts_close(fts);
       errno = saved;
-      return -1;
+      return MOVE_ERRNO;
     }
     }
   }
 
-  return MOVE_OK;
+  if (errno != 0) {
+    fts_close(fts);
+    return MOVE_ERRNO;
+  }
+  fts_close(fts);
+  return had_error ? MOVE_ERRNO : MOVE_OK;
 }
 
 static move_result_e try_dfs_move_to_dir(const char *source, const char *dest, flags_t flags) {
