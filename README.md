@@ -30,12 +30,12 @@ it turns out that building the core utils requires you to know actually
 a lot about unix systems.  I didn't know any of it, and tried not to use 
 AI too too much so it ended up taking me quite a while. 
 
-... 
-
-Turns out building these core utils is really really hard. It's pretty amazingly 
-tough actually.  Getting all the behavior right.  I was going to quit without 
-having finished my list, but I must go on.  
-
+As with all projects, the scope shifted around a ton while I built this.  
+I wanted to build all of the coreutils, then I realized that is way too ambitious. 
+More importantly, a ton of the coreutils are repetative.  For instance, `mv` and 
+`cp` use do a lot of the same things and use the same c functions, so I wouldn't
+learn a ton out of building both. As such, I tried to have a fairly different
+set of coreutils to maximize my learning value.
 
 ### TODO
 
@@ -50,5 +50,8 @@ having finished my list, but I must go on.
 - [x] tail
 - [x] du
 - [x] mv
-- [ ] cp
+- [ ] chmod 
+- [ ] find
+- [ ] ln
 - [ ] xargs 
+
