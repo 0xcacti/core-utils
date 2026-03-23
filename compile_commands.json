@@ -1,0 +1,254 @@
+[
+  {
+    "file": "cat/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "cat/main.c",
+      "-o",
+      "bin/cat"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/cat"
+  },
+  {
+    "file": "head/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "head/main.c",
+      "-o",
+      "bin/head"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/head"
+  },
+  {
+    "file": "pwd/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "pwd/main.c",
+      "-o",
+      "bin/pwd"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/pwd"
+  },
+  {
+    "file": "echo/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "echo/main.c",
+      "-o",
+      "bin/echo"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/echo"
+  },
+  {
+    "file": "yes/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "yes/main.c",
+      "-o",
+      "bin/yes"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/yes"
+  },
+  {
+    "file": "touch/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "touch/main.c",
+      "-o",
+      "bin/touch"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/touch"
+  },
+  {
+    "file": "tee/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "tee/main.c",
+      "-o",
+      "bin/tee"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/tee"
+  },
+  {
+    "file": "rm/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "rm/main.c",
+      "-o",
+      "bin/rm"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/rm"
+  },
+  {
+    "file": "tail/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "tail/main.c",
+      "-o",
+      "bin/tail"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/tail"
+  },
+  {
+    "file": "du/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "du/main.c",
+      "-o",
+      "bin/du"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/du"
+  },
+  {
+    "file": "mv/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "mv/main.c",
+      "-o",
+      "bin/mv"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/mv"
+  },
+  {
+    "file": "chmod/main.c",
+    "arguments": [
+      "cc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Werror",
+      "-Werror=implicit-function-declaration",
+      "-Wstrict-prototypes",
+      "-Wmissing-prototypes",
+      "-isysroot",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "chmod/main.c",
+      "-o",
+      "bin/chmod"
+    ],
+    "directory": "/Users/t/code/c/core-utils",
+    "output": "bin/chmod"
+  }
+]

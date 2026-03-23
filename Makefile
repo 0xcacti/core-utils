@@ -4,7 +4,7 @@ LDFLAGS :=
 LDLIBS :=
 
 BINDIR := bin
-TOOLDIRS := cat head pwd echo yes touch tee rm tail du mv
+TOOLDIRS := cat head pwd echo yes touch tee rm tail du mv chmod
 
 .PHONY: all clean
 all: $(addprefix $(BINDIR)/,$(TOOLDIRS))
@@ -14,6 +14,9 @@ $(BINDIR):
 
 $(BINDIR)/%: %/*.c | $(BINDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+compile_commands.json: clean
+	bear -- make
 
 clean:
 	rm -rf $(BINDIR)

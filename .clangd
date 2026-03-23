@@ -1,16 +1,9 @@
 CompileFlags:
   Add:
+    - -std=c17
     - -Wall
     - -Wextra
-    - -std=c11
-    - -Iinclude
-    - -I.
-    - -I/usr/local/include
-  Compiler: gcc
 
 Diagnostics:
   UnusedIncludes: Strict
-
-ClangTidy:
-  Add: [modernize*]
-  Remove: [modernize-use-trailing-return-type]
+  MissingIncludes: Strict
