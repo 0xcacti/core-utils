@@ -49,6 +49,6 @@ having finished my list, but I must go on.
 - [x] rm 
 - [x] tail
 - [x] du
-- [ ] mv
+- [x] mv
 - [ ] cp
 - [ ] xargs 
