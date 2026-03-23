@@ -4,7 +4,7 @@ LDFLAGS :=
 LDLIBS :=
 
 BINDIR := bin
-TOOLDIRS := cat head pwd echo yes touch tee rm tail du mv
+TOOLDIRS := cat head pwd echo yes touch tee rm tail du mv cp
 
 .PHONY: all clean
 all: $(addprefix $(BINDIR)/,$(TOOLDIRS))
