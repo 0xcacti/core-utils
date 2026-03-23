@@ -2,12 +2,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
-
-static void usage(const char *progname) {
-  dprintf(STDERR_FILENO, "%s [-fhv] [-R [-H | -L | -P]] mode file ...", progname);
-  exit(2);
-}
 
 typedef enum {
   SYMLINK_NONE, // -P
@@ -22,6 +18,25 @@ typedef struct {
   bool recurse;   // -R
   symlink_behavior_e sym_mode;
 } flags_t;
+
+typedef enum {
+  MODE_OCTAL,
+  MODE_SYMBOLIC,
+  MODE_BAD,
+} mode_form_e;
+
+static void usage(const char *progname) {
+  dprintf(STDERR_FILENO, "%s [-fhv] [-R [-H | -L | -P]] mode file ...", progname);
+  exit(2);
+}
+
+static mode_form_e parse_mode(const char *mode) {
+  return MODE_OCTAL;
+}
+
+static void parse_octal(const char *mode) {
+  return;
+}
 
 int main(int argc, char *argv[]) {
   int ch;
@@ -54,6 +69,8 @@ int main(int argc, char *argv[]) {
       usage(argv[0]);
     }
   }
+
+  mode_form_e mode = parse_mode(argv[optind]);
 
   return 0;
 }
