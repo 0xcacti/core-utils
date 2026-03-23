@@ -342,6 +342,38 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
       char buf[PATH_MAX];
       snprintf(buf, PATH_MAX, "%s%s", dest, rel);
 
+      bool exists = false;
+      struct stat st;
+      if (lstat(buf, &st) == 0) {
+        exists = true;
+      } else if (errno != ENOENT) {
+        had_error = true;
+        break;
+      }
+      if (exists) {
+        if (flags.no_overwrite) {
+          break;
+        }
+
+        if (flags.interactive) {
+          bool dont_overwrite = false;
+          FILE *tty = fopen("/dev/tty", "r+");
+          if (tty == NULL) return MOVE_TTY_OPEN;
+          prompt(tty, dest, &dont_overwrite);
+          if (dont_overwrite) {
+            confirm_no_overwrite(tty);
+            fclose(tty);
+            break;
+          }
+          fclose(tty);
+        }
+
+        if (unlink(buf) < 0) {
+          had_error = true;
+          break;
+        }
+      }
+
       if (symlink(target, buf) < 0) {
         had_error = true;
         break;
@@ -352,6 +384,7 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
         break;
       }
 
+      if (flags.verbose) fprintf(stdout, "%s -> %s\n", ent->fts_path, buf);
       break;
     }
     case FTS_DNR:
