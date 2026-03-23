@@ -278,6 +278,18 @@ static move_result_e try_dfs_file_to_dir(const char *source, const char *dest, f
 }
 
 static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, flags_t flags) {
+  int src_len = strlen(source);
+  char source_copy[src_len + 1];
+  memcpy(source_copy, source, src_len + 1);
+  char *name = basename(source_copy);
+  if (!name) return MOVE_ERRNO;
+
+  char dest_root[PATH_MAX];
+  if (snprintf(dest_root, PATH_MAX, "%s/%s", dest, name) >= PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return MOVE_ERRNO;
+  }
+
   int fts_flags = FTS_PHYSICAL | FTS_NOCHDIR;
   char *paths[2];
   paths[0] = (char *)source;
@@ -292,7 +304,7 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
     case FTS_D: {
       const char *rel = ent->fts_path + strlen(source);
       char buf[PATH_MAX];
-      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+      snprintf(buf, PATH_MAX, "%s%s", dest_root, rel);
       if (mkdir(buf, ent->fts_statp->st_mode) < 0 && errno != EEXIST) {
         had_error = true;
       }
@@ -301,7 +313,7 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
     case FTS_DP: {
       const char *rel = ent->fts_path + strlen(source);
       char buf[PATH_MAX];
-      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+      snprintf(buf, PATH_MAX, "%s%s", dest_root, rel);
 
       struct timespec times[2] = {
           ent->fts_statp->st_atimespec,
@@ -322,7 +334,7 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
     case FTS_F: {
       const char *rel = ent->fts_path + strlen(source);
       char buf[PATH_MAX];
-      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+      snprintf(buf, PATH_MAX, "%s%s", dest_root, rel);
       if (try_dfs_move_to_path(ent->fts_path, buf, flags) != MOVE_OK) {
         had_error = true;
       }
@@ -340,7 +352,7 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
 
       const char *rel = ent->fts_path + strlen(source);
       char buf[PATH_MAX];
-      snprintf(buf, PATH_MAX, "%s%s", dest, rel);
+      snprintf(buf, PATH_MAX, "%s%s", dest_root, rel);
 
       bool exists = false;
       struct stat st;
@@ -359,7 +371,7 @@ static move_result_e try_dfs_dir_to_dir(const char *source, const char *dest, fl
           bool dont_overwrite = false;
           FILE *tty = fopen("/dev/tty", "r+");
           if (tty == NULL) return MOVE_TTY_OPEN;
-          prompt(tty, dest, &dont_overwrite);
+          prompt(tty, dest_root, &dont_overwrite);
           if (dont_overwrite) {
             confirm_no_overwrite(tty);
             fclose(tty);
