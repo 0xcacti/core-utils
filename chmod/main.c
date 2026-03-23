@@ -9,9 +9,6 @@ static void usage(const char *progname) {
 }
 
 int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
-
   int ch;
   while ((ch = getopt(argc, argv, "fhvRHLP")) != -1) {
     switch (ch) {
