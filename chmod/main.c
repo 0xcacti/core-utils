@@ -1,4 +1,5 @@
 #include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,11 +9,46 @@ static void usage(const char *progname) {
   exit(2);
 }
 
+typedef enum {
+  SYMLINK_NONE, // -P
+  SYMLINK_CMD,  // -H
+  SYMLINK_ALL,  // -L
+} symlink_behavior_e;
+
+typedef struct {
+  bool force;     // -f
+  bool no_follow; // -h
+  bool verbose;   // -v
+  bool recurse;   // -R
+  symlink_behavior_e sym_mode;
+} flags_t;
+
 int main(int argc, char *argv[]) {
   int ch;
-  while ((ch = getopt(argc, argv, "fhvRHLP")) != -1) {
+  flags_t flags = {0};
+  flags.sym_mode = SYMLINK_NONE;
+  while ((ch = getopt(argc, argv, "fhvRPHL")) != -1) {
     switch (ch) {
     case 'f':
+      flags.force = true;
+      break;
+    case 'h':
+      flags.no_follow = true;
+      break;
+    case 'v':
+      flags.verbose = true;
+      break;
+    case 'R':
+      flags.recurse = true;
+      break;
+    case 'P':
+      flags.sym_mode = SYMLINK_NONE;
+      break;
+    case 'H':
+      flags.sym_mode = SYMLINK_CMD;
+      break;
+    case 'L':
+      flags.sym_mode = SYMLINK_ALL;
       break;
     default:
       usage(argv[0]);
