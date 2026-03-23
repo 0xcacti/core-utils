@@ -26,17 +26,17 @@ typedef enum {
 } mode_form_e;
 
 static void usage(const char *progname) {
-  dprintf(STDERR_FILENO, "%s [-fhv] [-R [-H | -L | -P]] mode file ...", progname);
+  dprintf(STDERR_FILENO, "%s [-fhv] [-R [-H | -L | -P]] mode file ...\n", progname);
   exit(2);
 }
 
-static mode_form_e parse_mode(const char *mode) {
-  return MODE_OCTAL;
-}
-
-static void parse_octal(const char *mode) {
-  return;
-}
+// static mode_form_e parse_mode(const char *mode) {
+//   return MODE_OCTAL;
+// }
+//
+// static void parse_octal(const char *mode) {
+//   return;
+// }
 
 int main(int argc, char *argv[]) {
   int ch;
@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  mode_form_e mode = parse_mode(argv[optind]);
+  //   mode_form_e mode = parse_mode(argv[optind]);
 
   return 0;
 }
