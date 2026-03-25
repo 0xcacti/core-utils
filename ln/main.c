@@ -12,6 +12,13 @@
 #include <unistd.h>
 
 typedef enum {
+  LINK_OK,
+  LINK_EXISTS,
+  LINK_ERRNO,
+  LINK_TTY_OPEN,
+} link_result_e;
+
+typedef enum {
   LINK_HARD,
   LINK_SYMBOLIC,
 } link_mode_e;
@@ -78,7 +85,51 @@ static int classify_path(const char *path, bool is_target, bool *exists, bool *i
   return -1;
 }
 
-static int ln_exact_path(const char *source, const char *dest, flags_t flags) {
+static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
+  fprintf(tty, "overwrite %s? (y/n) [n] ", dest);
+  fflush(tty);
+  int ch, first;
+  first = ch = fgetc(tty);
+  while (ch != '\n' && ch != EOF) ch = fgetc(tty);
+  *dont_overwrite = (first == 'n' || first == 'N');
+  return 0;
+}
+
+static void confirm_no_overwrite(FILE *tty) {
+  fwrite("not overwritten\n", 1, 16, tty);
+}
+
+static link_result_e ln_exact_path(const char *source, const char *dest, flags_t flags) {
+  bool exists;
+  bool is_dir;
+  if (classify_path(dest, true, &exists, &is_dir, flags) < 0) return LINK_ERRNO;
+  if (exists) {
+    switch (flags.replace_mode) {
+    case REPLACE_DEFAULT:
+      return LINK_EXISTS;
+      break;
+    case REPLACE_INTERACTIVE:
+      bool dont_overwrite = false;
+      FILE *tty = fopen("/dev/tty", "r+");
+      if (tty == NULL) return LINK_TTY_OPEN;
+      prompt(tty, dest, &dont_overwrite);
+      if (dont_overwrite) {
+        confirm_no_overwrite(tty);
+        fclose(tty);
+        return LINK_OK;
+      }
+      fclose(tty);
+      // Intentionally fallthrough
+    case REPLACE_FORCE:
+      if (is_dir) {
+      } else {
+        if (unlink(dest) < 0) return LINK_ERRNO;
+      }
+
+      break;
+    }
+  }
+
   int r;
   if (flags.link_mode == LINK_HARD) {
     switch (flags.source_mode) {
@@ -95,22 +146,22 @@ static int ln_exact_path(const char *source, const char *dest, flags_t flags) {
     fprintf(stderr, "invalid link mode\n");
     exit(1);
   }
-  return r;
+  return r < 0 ? LINK_ERRNO : LINK_OK;
 }
 
-static int ln_target_dir(const char *source, const char *dest, flags_t flags) {
+static link_result_e ln_target_dir(const char *source, const char *dest, flags_t flags) {
   size_t len = strlen(source);
   char source_copy[len + 1];
   memcpy(source_copy, source, len + 1);
 
   char *name = basename(source_copy);
-  if (!name) return -1;
+  if (!name) return LINK_ERRNO;
 
   char buf[PATH_MAX];
   int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
   if (n < 0 || n >= PATH_MAX) {
     errno = ENAMETOOLONG;
-    return -1;
+    return LINK_ERRNO;
   }
 
   return ln_exact_path(source, buf, flags);
