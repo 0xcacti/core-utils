@@ -56,12 +56,31 @@ static void usage(const char *progname) {
 int main(int argc, char *argv[]) {
   int ch;
   flags_t flags = {0};
+  (void)flags;
 
-  while ((ch = getopt(argc, argv, "h")) != -1) {
+  while ((ch = getopt(argc, argv, "LPsFfiwhnv")) != -1) {
     switch (ch) {
-    case 'h':
-      flags.hard = true;
+    case 'L':
       break;
+    case 'P':
+      break;
+    case 's':
+      break;
+    case 'F':
+      break;
+    case 'f':
+      break;
+    case 'i':
+      break;
+    case 'w':
+      break;
+    case 'h':
+      break;
+    case 'n':
+      break;
+    case 'v':
+      break;
+
     default:
       usage(argv[0]);
     }
