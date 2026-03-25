@@ -88,11 +88,10 @@ static int ln_exact_path(const char *source, const char *dest, flags_t flags) {
   if (flags.link_mode == LINK_HARD) {
     switch (flags.source_mode) {
     case SOURCE_SYMLINK_FOLLOW:
-      r = link(source, dest);
-
+      r = linkat(AT_FDCWD, source, AT_FDCWD, dest, AT_SYMLINK_FOLLOW);
       break;
     case SOURCE_SYMLINK_NO_FOLLOW:
-      r = linkat(AT_FDCWD, source, AT_FDCWD, dest, AT_SYMLINK_FOLLOW);
+      r = link(source, dest);
       break;
     }
   } else if (flags.link_mode == LINK_SYMBOLIC) {
