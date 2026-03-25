@@ -1,18 +1,11 @@
+#include <errno.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-// The options are as follows:
-
-// -L    When creating a hard link to a symbolic link, create a hard link to the target of the
-// symbolic link.  This is the default.  This option cancels the -P
-//       option.
-
-// -P    When creating a hard link to a symbolic link, create a hard link to the symbolic link
-// itself.  This option cancels the -L option.
 
 typedef enum {
   LINK_HARD,
@@ -48,6 +41,39 @@ static void usage(const char *progname) {
   exit(2);
 }
 
+static void error_errno(const char *progname, const char *filename) {
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
+}
+
+static int classify_path(const char *path, bool is_target, bool *exists, bool *is_dir,
+                         flags_t flags) {
+  struct stat st;
+  int r;
+  if (is_target) {
+    r = (flags.no_target_symlink_follow) ? lstat(path, &st) : stat(path, &st);
+  } else {
+    if (flags.source_mode == SOURCE_SYMLINK_FOLLOW) {
+      r = stat(path, &st);
+    } else {
+      r = lstat(path, &st);
+    }
+  }
+
+  if (r == 0) {
+    *is_dir = S_ISDIR(st.st_mode);
+    *exists = true;
+    return 0;
+  }
+
+  if (errno == ENOENT) {
+    *exists = false;
+    *is_dir = false;
+    return 0;
+  }
+
+  return -1;
+}
+
 int main(int argc, char *argv[]) {
   int ch;
   flags_t flags = {
@@ -57,6 +83,7 @@ int main(int argc, char *argv[]) {
       .verbose = false,
       .no_target_symlink_follow = false,
       .force_target_directory = false,
+      .warn_dangling_source = false,
   };
 
   while ((ch = getopt(argc, argv, "LPsFfiwhnv")) != -1) {
@@ -94,7 +121,33 @@ int main(int argc, char *argv[]) {
       usage(argv[0]);
     }
   }
-  if (optind == argc) usage(argv[0]);
+
+  if (flags.force_target_directory == true && flags.replace_mode == REPLACE_DEFAULT) {
+    flags.replace_mode = REPLACE_FORCE;
+  }
+
+  if (flags.link_mode == LINK_SYMBOLIC && flags.source_mode != SOURCE_SYMLINK_FOLLOW) {
+    usage(argv[0]);
+  }
+
+  if (flags.link_mode != LINK_SYMBOLIC && flags.force_target_directory) {
+    usage(argv[0]);
+  }
+
+  if (flags.link_mode != LINK_SYMBOLIC && flags.warn_dangling_source) {
+    usage(argv[0]);
+  }
+
+  int num_args = argc - optind;
+  if (num_args < 2) usage(argv[0]);
+  bool exists = false;
+  bool is_dir = false;
+  if (classify_path(argv[argc - 1], true, &exists, &is_dir, flags) < 0) {
+    error_errno(argv[0], argv[argc - 1]);
+    exit(2);
+  }
+
+  if (num_args > 2 && !is_dir) usage(argv[0]);
 
   return 0;
 }
