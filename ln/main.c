@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/fcntl.h>
 #include <sys/stat.h>
+#include <sys/unistd.h>
 #include <unistd.h>
 
 typedef enum {
@@ -72,6 +74,34 @@ static int classify_path(const char *path, bool is_target, bool *exists, bool *i
   }
 
   return -1;
+}
+
+static int ln_target_dir(const char *source, const char *dest, flags_t flags) {
+  (void)source;
+  (void)dest;
+  (void)flags;
+  return -1;
+}
+
+static int ln_exact_path(const char *source, const char *dest, flags_t flags) {
+  int r;
+  if (flags.link_mode == LINK_HARD) {
+    switch (flags.source_mode) {
+    case SOURCE_SYMLINK_FOLLOW:
+      r = link(source, dest);
+
+      break;
+    case SOURCE_SYMLINK_NO_FOLLOW:
+      r = linkat(AT_FDCWD, source, AT_FDCWD, dest, AT_SYMLINK_FOLLOW);
+      break;
+    }
+  } else if (flags.link_mode == LINK_SYMBOLIC) {
+    r = symlink(source, dest);
+  } else {
+    fprintf(stderr, "invalid link mode\n");
+    exit(1);
+  }
+  return r;
 }
 
 int main(int argc, char *argv[]) {
@@ -149,5 +179,19 @@ int main(int argc, char *argv[]) {
 
   if (num_args > 2 && !is_dir) usage(argv[0]);
 
-  return 0;
+  int ret = 0;
+  for (int i = optind; i < argc - 1; i++) {
+    int r;
+    if (is_dir) {
+      r = ln_target_dir(argv[i], argv[argc - 1], flags);
+    } else {
+      r = ln_exact_path(argv[i], argv[argc - 1], flags);
+    }
+    if (r < 0) {
+      error_errno(argv[0], argv[i]);
+      ret = 1;
+    }
+  }
+
+  return ret;
 }
