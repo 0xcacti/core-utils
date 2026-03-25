@@ -5,18 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-typedef struct {
-  bool super_force;
-  bool hard_link;
-  bool force;
-} flags_t;
-
 // The options are as follows:
-
-// -F    If the target file already exists and is a directory, then remove it so that the link may
-// occur.  The -F option should be used with either -f or -i options.
-//       If neither -f nor -i is specified, -f is implied.  The -F option is a no-op unless -s is
-//       specified.
 
 // -L    When creating a hard link to a symbolic link, create a hard link to the target of the
 // symbolic link.  This is the default.  This option cancels the -P
@@ -25,25 +14,31 @@ typedef struct {
 // -P    When creating a hard link to a symbolic link, create a hard link to the symbolic link
 // itself.  This option cancels the -L option.
 
-// -f    If the target file already exists, then unlink it so that the link may occur.  (The -f
-// option overrides any previous -i and -w options.)
+typedef enum {
+  LINK_HARD,
+  LINK_SYMBOLIC,
+} link_mode_e;
 
-// -h    If the target_file or target_dir is a symbolic link, do not follow it.  This is most useful
-// with the -f option, to replace a symlink which may point to a
-//       directory.
+typedef enum {
+  SOURCE_SYMLINK_FOLLOW,
+  SOURCE_SYMLINK_NO_FOLLOW,
+} source_symlink_mode_e;
 
-// -i    Cause ln to write a prompt to standard error if the target file exists.  If the response
-// from the standard input begins with the character ‘y’ or ‘Y’, then
-//       unlink the target file so that the link may occur.  Otherwise, do not attempt the link.
-//       (The -i option overrides any previous -f options.)
+typedef enum {
+  REPLACE_DEFAULT,
+  REPLACE_FORCE,
+  REPLACE_INTERACTIVE,
+} replace_mode_e;
 
-// -n    Same as -h, for compatibility with other ln implementations.
-
-// -s    Create a symbolic link.
-
-// -v    Cause ln to be verbose, showing files as they are processed.
-
-// -w    Warn if the source of a symbolic link does not currently exist.
+typedef struct {
+  link_mode_e link_mode;             // default hard, -s => symbolic
+  source_symlink_mode_e source_mode; // -L / -P, only meaningful for hard links
+  replace_mode_e replace_mode;       // -f / -i
+  bool verbose;                      // -v
+  bool warn_dangling_source;         // -w, only meaningful with -s
+  bool no_target_symlink_follow;     // -h, -n
+  bool force_target_directory;       // -F, only meaningful with -s
+} flags_t;
 
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO,
@@ -55,32 +50,46 @@ static void usage(const char *progname) {
 
 int main(int argc, char *argv[]) {
   int ch;
-  flags_t flags = {0};
-  (void)flags;
+  flags_t flags = {
+      .link_mode = LINK_HARD,
+      .source_mode = SOURCE_SYMLINK_FOLLOW,
+      .replace_mode = REPLACE_DEFAULT,
+      .verbose = false,
+      .no_target_symlink_follow = false,
+      .force_target_directory = false,
+  };
 
   while ((ch = getopt(argc, argv, "LPsFfiwhnv")) != -1) {
     switch (ch) {
     case 'L':
+      flags.source_mode = SOURCE_SYMLINK_FOLLOW;
       break;
     case 'P':
+      flags.source_mode = SOURCE_SYMLINK_NO_FOLLOW;
       break;
     case 's':
+      flags.link_mode = LINK_SYMBOLIC;
       break;
     case 'F':
+      flags.force_target_directory = true;
       break;
     case 'f':
+      flags.replace_mode = REPLACE_FORCE;
+      flags.warn_dangling_source = false;
       break;
     case 'i':
+      flags.replace_mode = REPLACE_INTERACTIVE;
       break;
     case 'w':
+      flags.warn_dangling_source = true;
       break;
     case 'h':
-      break;
     case 'n':
+      flags.no_target_symlink_follow = true;
       break;
     case 'v':
+      flags.verbose = true;
       break;
-
     default:
       usage(argv[0]);
     }
