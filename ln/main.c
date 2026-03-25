@@ -1,11 +1,13 @@
 #include <errno.h>
 #include <getopt.h>
+#include <libgen.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
+#include <sys/syslimits.h>
 #include <sys/unistd.h>
 #include <unistd.h>
 
@@ -76,13 +78,6 @@ static int classify_path(const char *path, bool is_target, bool *exists, bool *i
   return -1;
 }
 
-static int ln_target_dir(const char *source, const char *dest, flags_t flags) {
-  (void)source;
-  (void)dest;
-  (void)flags;
-  return -1;
-}
-
 static int ln_exact_path(const char *source, const char *dest, flags_t flags) {
   int r;
   if (flags.link_mode == LINK_HARD) {
@@ -101,6 +96,24 @@ static int ln_exact_path(const char *source, const char *dest, flags_t flags) {
     exit(1);
   }
   return r;
+}
+
+static int ln_target_dir(const char *source, const char *dest, flags_t flags) {
+  size_t len = strlen(source);
+  char source_copy[len + 1];
+  memcpy(source_copy, source, len + 1);
+
+  char *name = basename(source_copy);
+  if (!name) return -1;
+
+  char buf[PATH_MAX];
+  int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
+  if (n < 0 || n >= PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  return ln_exact_path(source, buf, flags);
 }
 
 int main(int argc, char *argv[]) {
