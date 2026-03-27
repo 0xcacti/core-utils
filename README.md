@@ -50,8 +50,8 @@ set of coreutils to maximize my learning value.
 - [x] tail
 - [x] du
 - [x] mv
-- [ ] chmod 
 - [ ] ln
+- [ ] chmod 
 - [ ] find
 - [ ] xargs 
 
