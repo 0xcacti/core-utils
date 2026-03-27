@@ -56,6 +56,10 @@ static void error_errno(const char *progname, const char *filename) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
 }
 
+static void error_msg(const char *progname, const char *m1, const char *m2) {
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
+}
+
 static int classify_path(const char *path, bool is_target, bool *exists, bool *is_dir,
                          flags_t flags) {
   struct stat st;
@@ -102,31 +106,33 @@ static void confirm_no_overwrite(FILE *tty) {
 static link_result_e ln_exact_path(const char *source, const char *dest, flags_t flags) {
   bool exists;
   bool is_dir;
-  if (classify_path(dest, true, &exists, &is_dir, flags) < 0) return LINK_ERRNO;
-  if (exists) {
-    switch (flags.replace_mode) {
-    case REPLACE_DEFAULT:
-      return LINK_EXISTS;
-      break;
-    case REPLACE_INTERACTIVE:
-      bool dont_overwrite = false;
-      FILE *tty = fopen("/dev/tty", "r+");
-      if (tty == NULL) return LINK_TTY_OPEN;
-      prompt(tty, dest, &dont_overwrite);
-      if (dont_overwrite) {
-        confirm_no_overwrite(tty);
+  if (flags.replace_mode != REPLACE_DEFAULT) {
+    if (classify_path(dest, true, &exists, &is_dir, flags) < 0) return LINK_ERRNO;
+    if (exists) {
+      switch (flags.replace_mode) {
+      case REPLACE_DEFAULT:
+        break;
+      case REPLACE_INTERACTIVE: {
+        bool dont_overwrite = false;
+        FILE *tty = fopen("/dev/tty", "r+");
+        if (tty == NULL) return LINK_TTY_OPEN;
+        prompt(tty, dest, &dont_overwrite);
+        if (dont_overwrite) {
+          confirm_no_overwrite(tty);
+          fclose(tty);
+          return LINK_OK;
+        }
         fclose(tty);
-        return LINK_OK;
       }
-      fclose(tty);
-      // Intentionally fallthrough
-    case REPLACE_FORCE:
-      if (is_dir) {
-      } else {
-        if (unlink(dest) < 0) return LINK_ERRNO;
-      }
+        // Intentionally fallthrough
+      case REPLACE_FORCE:
+        if (is_dir) {
+        } else {
+          if (unlink(dest) < 0) return LINK_ERRNO;
+        }
 
-      break;
+        break;
+      }
     }
   }
 
@@ -146,7 +152,13 @@ static link_result_e ln_exact_path(const char *source, const char *dest, flags_t
     fprintf(stderr, "invalid link mode\n");
     exit(1);
   }
-  return r < 0 ? LINK_ERRNO : LINK_OK;
+
+  if (r < 0) {
+    if (errno == EEXIST) return LINK_EXISTS;
+    return LINK_ERRNO;
+  }
+
+  return LINK_OK;
 }
 
 static link_result_e ln_target_dir(const char *source, const char *dest, flags_t flags) {
@@ -244,15 +256,30 @@ int main(int argc, char *argv[]) {
 
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
-    int r;
+    link_result_e r;
     if (is_dir) {
       r = ln_target_dir(argv[i], argv[argc - 1], flags);
     } else {
       r = ln_exact_path(argv[i], argv[argc - 1], flags);
     }
-    if (r < 0) {
-      error_errno(argv[0], argv[i]);
+
+    switch (r) {
+    case LINK_OK:
+      break;
+    case LINK_ERRNO:
       ret = 1;
+      error_errno(argv[0], argv[i]);
+      break;
+    case LINK_EXISTS:
+      ret = 1;
+      // TODO: this logs ugly on file exists when target is a directory, because it doesn't know
+      // about path construction
+      error_msg(argv[0], argv[argc - 1], "File exists");
+      break;
+    case LINK_TTY_OPEN:
+      ret = 1;
+      error_msg(argv[0], "/dev/tty", "failed to open");
+      break;
     }
   }
 
