@@ -103,7 +103,15 @@ static void confirm_no_overwrite(FILE *tty) {
   fwrite("not overwritten\n", 1, 16, tty);
 }
 
-static link_result_e ln_exact_path(const char *source, const char *dest, flags_t flags) {
+static link_result_e ln_exact_path(const char *source, const char *dest,
+                                   char attempted_dest[PATH_MAX], flags_t flags) {
+
+  int n = snprintf(attempted_dest, PATH_MAX, "%s", dest);
+  if (n < 0 || n >= PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return LINK_ERRNO;
+  }
+
   bool exists;
   bool is_dir;
   if (flags.replace_mode != REPLACE_DEFAULT) {
@@ -161,7 +169,8 @@ static link_result_e ln_exact_path(const char *source, const char *dest, flags_t
   return LINK_OK;
 }
 
-static link_result_e ln_target_dir(const char *source, const char *dest, flags_t flags) {
+static link_result_e ln_target_dir(const char *source, const char *dest,
+                                   char attempted_dest[PATH_MAX], flags_t flags) {
   size_t len = strlen(source);
   char source_copy[len + 1];
   memcpy(source_copy, source, len + 1);
@@ -169,14 +178,13 @@ static link_result_e ln_target_dir(const char *source, const char *dest, flags_t
   char *name = basename(source_copy);
   if (!name) return LINK_ERRNO;
 
-  char buf[PATH_MAX];
-  int n = snprintf(buf, PATH_MAX, "%s/%s", dest, name);
+  int n = snprintf(attempted_dest, PATH_MAX, "%s/%s", dest, name);
   if (n < 0 || n >= PATH_MAX) {
     errno = ENAMETOOLONG;
     return LINK_ERRNO;
   }
 
-  return ln_exact_path(source, buf, flags);
+  return ln_exact_path(source, dest, attempted_dest, flags);
 }
 
 int main(int argc, char *argv[]) {
@@ -257,10 +265,11 @@ int main(int argc, char *argv[]) {
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
     link_result_e r;
+    char attempted_dest[PATH_MAX];
     if (is_dir) {
-      r = ln_target_dir(argv[i], argv[argc - 1], flags);
+      r = ln_target_dir(argv[i], argv[argc - 1], attempted_dest, flags);
     } else {
-      r = ln_exact_path(argv[i], argv[argc - 1], flags);
+      r = ln_exact_path(argv[i], argv[argc - 1], attempted_dest, flags);
     }
 
     switch (r) {
@@ -268,13 +277,11 @@ int main(int argc, char *argv[]) {
       break;
     case LINK_ERRNO:
       ret = 1;
-      error_errno(argv[0], argv[i]);
+      error_errno(argv[0], attempted_dest);
       break;
     case LINK_EXISTS:
       ret = 1;
-      // TODO: this logs ugly on file exists when target is a directory, because it doesn't know
-      // about path construction
-      error_msg(argv[0], argv[argc - 1], "File exists");
+      error_msg(argv[0], attempted_dest, "File exists");
       break;
     case LINK_TTY_OPEN:
       ret = 1;
