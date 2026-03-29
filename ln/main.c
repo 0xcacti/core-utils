@@ -184,7 +184,7 @@ static link_result_e ln_target_dir(const char *source, const char *dest,
     return LINK_ERRNO;
   }
 
-  return ln_exact_path(source, dest, attempted_dest, flags);
+  return ln_exact_path(source, attempted_dest, attempted_dest, flags);
 }
 
 int main(int argc, char *argv[]) {
