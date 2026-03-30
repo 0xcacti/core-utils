@@ -33,7 +33,7 @@ static void usage(const char *progname) {
 // static mode_form_e parse_mode(const char *mode) {
 //   return MODE_OCTAL;
 // }
-//
+
 // static void parse_octal(const char *mode) {
 //   return;
 // }
