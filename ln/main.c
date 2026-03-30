@@ -103,19 +103,12 @@ static void confirm_no_overwrite(FILE *tty) {
   fwrite("not overwritten\n", 1, 16, tty);
 }
 
-static link_result_e ln_exact_path(const char *source, const char *dest,
-                                   char attempted_dest[PATH_MAX], flags_t flags) {
-
-  int n = snprintf(attempted_dest, PATH_MAX, "%s", dest);
-  if (n < 0 || n >= PATH_MAX) {
-    errno = ENAMETOOLONG;
-    return LINK_ERRNO;
-  }
+static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
 
   bool exists;
   bool is_dir;
   if (flags.replace_mode != REPLACE_DEFAULT) {
-    if (classify_path(dest, true, &exists, &is_dir, flags) < 0) return LINK_ERRNO;
+    if (classify_path(resolved_dest, true, &exists, &is_dir, flags) < 0) return LINK_ERRNO;
     if (exists) {
       switch (flags.replace_mode) {
       case REPLACE_DEFAULT:
@@ -124,7 +117,7 @@ static link_result_e ln_exact_path(const char *source, const char *dest,
         bool dont_overwrite = false;
         FILE *tty = fopen("/dev/tty", "r+");
         if (tty == NULL) return LINK_TTY_OPEN;
-        prompt(tty, dest, &dont_overwrite);
+        prompt(tty, resolved_dest, &dont_overwrite);
         if (dont_overwrite) {
           confirm_no_overwrite(tty);
           fclose(tty);
@@ -136,7 +129,7 @@ static link_result_e ln_exact_path(const char *source, const char *dest,
       case REPLACE_FORCE:
         if (is_dir) {
         } else {
-          if (unlink(dest) < 0) return LINK_ERRNO;
+          if (unlink(resolved_dest) < 0) return LINK_ERRNO;
         }
 
         break;
@@ -148,14 +141,14 @@ static link_result_e ln_exact_path(const char *source, const char *dest,
   if (flags.link_mode == LINK_HARD) {
     switch (flags.source_mode) {
     case SOURCE_SYMLINK_FOLLOW:
-      r = linkat(AT_FDCWD, source, AT_FDCWD, dest, AT_SYMLINK_FOLLOW);
+      r = linkat(AT_FDCWD, source, AT_FDCWD, resolved_dest, AT_SYMLINK_FOLLOW);
       break;
     case SOURCE_SYMLINK_NO_FOLLOW:
-      r = link(source, dest);
+      r = link(source, resolved_dest);
       break;
     }
   } else if (flags.link_mode == LINK_SYMBOLIC) {
-    r = symlink(source, dest);
+    r = symlink(source, resolved_dest);
   } else {
     fprintf(stderr, "invalid link mode\n");
     exit(1);
@@ -167,6 +160,16 @@ static link_result_e ln_exact_path(const char *source, const char *dest,
   }
 
   return LINK_OK;
+}
+
+static link_result_e ln_exact_path(const char *source, const char *dest,
+                                   char attempted_dest[PATH_MAX], flags_t flags) {
+  int n = snprintf(attempted_dest, PATH_MAX, "%s", dest);
+  if (n < 0 || n >= PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return LINK_ERRNO;
+  }
+  return ln_at_path(source, attempted_dest, flags);
 }
 
 static link_result_e ln_target_dir(const char *source, const char *dest,
@@ -184,7 +187,7 @@ static link_result_e ln_target_dir(const char *source, const char *dest,
     return LINK_ERRNO;
   }
 
-  return ln_exact_path(source, attempted_dest, attempted_dest, flags);
+  return ln_at_path(source, attempted_dest, flags);
 }
 
 int main(int argc, char *argv[]) {
