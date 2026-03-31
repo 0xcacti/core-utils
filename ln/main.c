@@ -44,6 +44,14 @@ typedef struct {
   bool force_target_directory;       // -F, only meaningful with -s
 } flags_t;
 
+typedef struct {
+  bool exists;
+  bool is_symlink;
+  bool is_dir_nofollow;
+  bool is_dir_follow;
+
+} path_class_t;
+
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO,
           "usage: %s [-L | -P | -s [-F]] [-f | -iw] [-hnv] source_file [target_file]\n"
@@ -60,8 +68,7 @@ static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
 }
 
-static int classify_path(const char *path, bool is_target, bool *exists, bool *is_dir,
-                         flags_t flags) {
+static int classify_path(const char *path, bool is_target, path_class_t *class, flags_t flags) {
   struct stat st;
   int r;
   if (is_target) {
@@ -75,8 +82,8 @@ static int classify_path(const char *path, bool is_target, bool *exists, bool *i
   }
 
   if (r == 0) {
-    *is_dir = S_ISDIR(st.st_mode);
-    *exists = true;
+    class->exists = true;
+    = S_ISDIR(st.st_mode);
     return 0;
   }
 
@@ -128,6 +135,7 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
         // Intentionally fallthrough
       case REPLACE_FORCE:
         if (is_dir) {
+
         } else {
           if (unlink(resolved_dest) < 0) return LINK_ERRNO;
         }
