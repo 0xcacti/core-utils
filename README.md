@@ -55,3 +55,5 @@ set of coreutils to maximize my learning value.
 - [ ] find
 - [ ] xargs 
 
+Man, this project continues to be annoying.  Like, I went so fast through du and mv, and then it turns out ln is surprisingly harder than I thought. 
+I suppose part of it is do I fully understand the core util or not. 
