@@ -49,7 +49,6 @@ typedef struct {
   bool is_symlink;
   bool is_dir_nofollow;
   bool is_dir_follow;
-
 } path_class_t;
 
 static void usage(const char *progname) {
@@ -68,32 +67,31 @@ static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
 }
 
-static int classify_path(const char *path, bool is_target, path_class_t *class, flags_t flags) {
-  struct stat st;
-  int r;
-  if (is_target) {
-    r = (flags.no_target_symlink_follow) ? lstat(path, &st) : stat(path, &st);
-  } else {
-    if (flags.source_mode == SOURCE_SYMLINK_FOLLOW) {
-      r = stat(path, &st);
-    } else {
-      r = lstat(path, &st);
+static int classify_path(const char *path, path_class_t *class) {
+  int r = 0;
+  struct stat st_nofollow;
+  if (lstat(path, &st_nofollow) < 0) {
+    if (r < 0) {
+      if (errno == ENOENT) {
+        return 0;
+      }
+      return -1;
     }
   }
+  class->exists = true;
+  class->is_symlink = S_ISLNK(st_nofollow.st_mode);
 
-  if (r == 0) {
-    class->exists = true;
-    = S_ISDIR(st.st_mode);
-    return 0;
+  struct stat st_follow;
+
+  if (stat(path, &st_follow) < 0) {
+    if (errno == ENOENT && class->is_symlink == true) {
+      return 0;
+    }
+    return -1;
   }
 
-  if (errno == ENOENT) {
-    *exists = false;
-    *is_dir = false;
-    return 0;
-  }
-
-  return -1;
+  class->is_dir_follow = S_ISDIR(st_follow.st_mode);
+  return 0;
 }
 
 static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
@@ -112,11 +110,10 @@ static void confirm_no_overwrite(FILE *tty) {
 
 static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
 
-  bool exists;
-  bool is_dir;
+  path_class_t class = {0};
   if (flags.replace_mode != REPLACE_DEFAULT) {
-    if (classify_path(resolved_dest, true, &exists, &is_dir, flags) < 0) return LINK_ERRNO;
-    if (exists) {
+    if (classify_path(resolved_dest, &class) < 0) return LINK_ERRNO;
+    if (class.exists) {
       switch (flags.replace_mode) {
       case REPLACE_DEFAULT:
         break;
@@ -134,7 +131,7 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
       }
         // Intentionally fallthrough
       case REPLACE_FORCE:
-        if (is_dir) {
+        if (class.is_dir_follow) {
 
         } else {
           if (unlink(resolved_dest) < 0) return LINK_ERRNO;
