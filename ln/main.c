@@ -261,20 +261,19 @@ int main(int argc, char *argv[]) {
 
   int num_args = argc - optind;
   if (num_args < 2) usage(argv[0]);
-  bool exists = false;
-  bool is_dir = false;
-  if (classify_path(argv[argc - 1], true, &exists, &is_dir, flags) < 0) {
+  path_class_t class = {0};
+  if (classify_path(argv[argc - 1], &class) < 0) {
     error_errno(argv[0], argv[argc - 1]);
     exit(2);
   }
 
-  if (num_args > 2 && !is_dir) usage(argv[0]);
+  if (num_args > 2 && !class.is_dir) usage(argv[0]);
 
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
     link_result_e r;
     char attempted_dest[PATH_MAX];
-    if (is_dir) {
+    if (class.is_dir) {
       r = ln_target_dir(argv[i], argv[argc - 1], attempted_dest, flags);
     } else {
       r = ln_exact_path(argv[i], argv[argc - 1], attempted_dest, flags);
