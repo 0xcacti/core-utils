@@ -67,22 +67,24 @@ static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
 }
 
+static bool target_acts_as_dir(const path_class_t *class, const flags_t flags) {
+  if (class->exists != true) return false;
+  if (flags.no_target_symlink_follow == true) return class->is_dir_nofollow;
+}
+
 static int classify_path(const char *path, path_class_t *class) {
-  int r = 0;
   struct stat st_nofollow;
   if (lstat(path, &st_nofollow) < 0) {
-    if (r < 0) {
-      if (errno == ENOENT) {
-        return 0;
-      }
-      return -1;
+    if (errno == ENOENT) {
+      return 0;
     }
+    return -1;
   }
   class->exists = true;
   class->is_symlink = S_ISLNK(st_nofollow.st_mode);
+  class->is_dir_nofollow = S_ISDIR(st_nofollow.st_mode);
 
   struct stat st_follow;
-
   if (stat(path, &st_follow) < 0) {
     if (errno == ENOENT && class->is_symlink == true) {
       return 0;
@@ -267,7 +269,7 @@ int main(int argc, char *argv[]) {
     exit(2);
   }
 
-  if (num_args > 2 && !class.is_dir) usage(argv[0]);
+  if (num_args > 2 && !class.is_dir_follow == false) usage(argv[0]);
 
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
