@@ -70,6 +70,7 @@ static void error_msg(const char *progname, const char *m1, const char *m2) {
 static bool target_acts_as_dir(const path_class_t *class, const flags_t flags) {
   if (class->exists != true) return false;
   if (flags.no_target_symlink_follow == true) return class->is_dir_nofollow;
+  return class->is_dir_follow;
 }
 
 static int classify_path(const char *path, path_class_t *class) {
@@ -269,13 +270,14 @@ int main(int argc, char *argv[]) {
     exit(2);
   }
 
-  if (num_args > 2 && !class.is_dir_follow == false) usage(argv[0]);
+  bool is_dir = target_acts_as_dir(&class, flags);
+  if (num_args > 2 && !is_dir) usage(argv[0]);
 
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
     link_result_e r;
     char attempted_dest[PATH_MAX];
-    if (class.is_dir) {
+    if (is_dir) {
       r = ln_target_dir(argv[i], argv[argc - 1], attempted_dest, flags);
     } else {
       r = ln_exact_path(argv[i], argv[argc - 1], attempted_dest, flags);
