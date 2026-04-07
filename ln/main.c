@@ -112,7 +112,6 @@ static void confirm_no_overwrite(FILE *tty) {
 }
 
 static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
-
   path_class_t class = {0};
   if (flags.replace_mode != REPLACE_DEFAULT) {
     if (classify_path(resolved_dest, &class) < 0) return LINK_ERRNO;
@@ -134,7 +133,8 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
       }
         // Intentionally fallthrough
       case REPLACE_FORCE:
-        if (class.is_dir_follow) {
+        bool dest_is_dir = target_acts_as_dir(&class, flags);
+        if (dest_is_dir) {
 
         } else {
           if (unlink(resolved_dest) < 0) return LINK_ERRNO;
