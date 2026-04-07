@@ -97,6 +97,13 @@ static int classify_path(const char *path, path_class_t *class) {
   return 0;
 }
 
+static bool can_force_replace_dir(const path_class_t *class, const flags_t flags) {
+  if (!class->exists) return false;
+  if (flags.link_mode != LINK_SYMBOLIC) return false;
+  if (!flags.force_target_directory) return false;
+  return target_acts_as_dir(class, flags);
+}
+
 static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
   fprintf(tty, "overwrite %s? (y/n) [n] ", dest);
   fflush(tty);
@@ -134,12 +141,12 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
         // Intentionally fallthrough
       case REPLACE_FORCE:
         bool dest_is_dir = target_acts_as_dir(&class, flags);
-        if (dest_is_dir) {
-
-        } else {
+        bool can_replace_dir = can_force_replace_dir(&class, flags);
+        if (can_replace_dir) {
+          if (rmdir(resolved_dest) < 0) return LINK_ERRNO;
+        } else if (!dest_is_dir) {
           if (unlink(resolved_dest) < 0) return LINK_ERRNO;
         }
-
         break;
       }
     }
