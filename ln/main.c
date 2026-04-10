@@ -15,7 +15,7 @@ typedef enum {
   LINK_OK,
   LINK_EXISTS,
   LINK_ERRNO,
-  LINK_TTY_OPEN,
+  LINK_SKIPPED,
 } link_result_e;
 
 typedef enum {
@@ -104,18 +104,18 @@ static bool can_force_replace_dir(const path_class_t *class, const flags_t flags
   return target_acts_as_dir(class, flags);
 }
 
-static int prompt(FILE *tty, const char *dest, bool *dont_overwrite) {
-  fprintf(tty, "overwrite %s? (y/n) [n] ", dest);
-  fflush(tty);
+static int prompt(const char *dest, bool *overwrite) {
+  fprintf(stderr, "overwrite %s? (y/n) [n] ", dest);
+  fflush(stderr);
   int ch, first;
-  first = ch = fgetc(tty);
-  while (ch != '\n' && ch != EOF) ch = fgetc(tty);
-  *dont_overwrite = (first == 'n' || first == 'N');
+  first = ch = fgetc(stdin);
+  while (ch != '\n' && ch != EOF) ch = fgetc(stdin);
+  *overwrite = (first == 'y' || first == 'Y');
   return 0;
 }
 
-static void confirm_no_overwrite(FILE *tty) {
-  fwrite("not overwritten\n", 1, 16, tty);
+static void confirm_no_overwrite(void) {
+  fwrite("not replaced\n", 1, 13, stderr);
 }
 
 static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
@@ -128,15 +128,11 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
         break;
       case REPLACE_INTERACTIVE: {
         bool dont_overwrite = false;
-        FILE *tty = fopen("/dev/tty", "r+");
-        if (tty == NULL) return LINK_TTY_OPEN;
-        prompt(tty, resolved_dest, &dont_overwrite);
-        if (dont_overwrite) {
-          confirm_no_overwrite(tty);
-          fclose(tty);
-          return LINK_OK;
+        prompt(resolved_dest, &dont_overwrite);
+        if (!dont_overwrite) {
+          confirm_no_overwrite();
+          return LINK_SKIPPED;
         }
-        fclose(tty);
       }
         // Intentionally fallthrough
       case REPLACE_FORCE: {
@@ -305,9 +301,7 @@ int main(int argc, char *argv[]) {
       ret = 1;
       error_msg(argv[0], attempted_dest, "File exists");
       break;
-    case LINK_TTY_OPEN:
-      ret = 1;
-      error_msg(argv[0], "/dev/tty", "failed to open");
+    case LINK_SKIPPED:
       break;
     }
   }
