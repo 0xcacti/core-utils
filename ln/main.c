@@ -139,7 +139,7 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
         fclose(tty);
       }
         // Intentionally fallthrough
-      case REPLACE_FORCE:
+      case REPLACE_FORCE: {
         bool dest_is_dir = target_acts_as_dir(&class, flags);
         bool can_replace_dir = can_force_replace_dir(&class, flags);
         if (can_replace_dir) {
@@ -148,6 +148,7 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
           if (unlink(resolved_dest) < 0) return LINK_ERRNO;
         }
         break;
+      }
       }
     }
   }
@@ -292,6 +293,9 @@ int main(int argc, char *argv[]) {
 
     switch (r) {
     case LINK_OK:
+      if (flags.verbose) {
+        fprintf(stdout, "%s => %s\n", attempted_dest, argv[i]);
+      }
       break;
     case LINK_ERRNO:
       ret = 1;
