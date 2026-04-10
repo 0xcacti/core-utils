@@ -147,8 +147,7 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
   }
 
   int r;
-  link_result_e ret = LINK_OK;
-
+  bool warn_dangling = false;
   if (flags.link_mode == LINK_HARD) {
     switch (flags.source_mode) {
     case SOURCE_SYMLINK_FOLLOW:
@@ -161,12 +160,10 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
   } else if (flags.link_mode == LINK_SYMBOLIC) {
     if (flags.warn_dangling_source) {
       struct stat st;
-      errno = 0;
       if (stat(source, &st) < 0) {
         if (errno == ENOENT) {
-          ret = LINK_WARN;
+          warn_dangling = true;
         }
-        ret = LINK_ERRNO;
       }
     }
     r = symlink(source, resolved_dest);
@@ -175,11 +172,11 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
     exit(1);
   }
 
-  if (r < 0 && ret != LINK_OK) {
+  if (r < 0) {
     if (errno == EEXIST) return LINK_EXISTS;
-    return ret;
+    return LINK_ERRNO;
   }
-
+  if (warn_dangling) return LINK_WARN;
   return LINK_OK;
 }
 
@@ -312,8 +309,11 @@ int main(int argc, char *argv[]) {
       break;
     case LINK_SKIPPED:
       break;
-    case LINK_WARN:
-      error_msg(argv[0], source,
+    case LINK_WARN: {
+      char buf[PATH_MAX];
+      snprintf(buf, PATH_MAX, "warning: %s", argv[i]);
+      error_msg(argv[0], buf, "No such file or directory");
+    }
     }
   }
 
