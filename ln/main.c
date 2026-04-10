@@ -13,6 +13,7 @@
 
 typedef enum {
   LINK_OK,
+  LINK_WARN,
   LINK_EXISTS,
   LINK_ERRNO,
   LINK_SKIPPED,
@@ -105,17 +106,13 @@ static bool can_force_replace_dir(const path_class_t *class, const flags_t flags
 }
 
 static int prompt(const char *dest, bool *overwrite) {
-  fprintf(stderr, "overwrite %s? (y/n) [n] ", dest);
+  fprintf(stderr, "replace %s? ", dest);
   fflush(stderr);
   int ch, first;
   first = ch = fgetc(stdin);
   while (ch != '\n' && ch != EOF) ch = fgetc(stdin);
   *overwrite = (first == 'y' || first == 'Y');
   return 0;
-}
-
-static void confirm_no_overwrite(void) {
-  fwrite("not replaced\n", 1, 13, stderr);
 }
 
 static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
@@ -130,7 +127,7 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
         bool dont_overwrite = false;
         prompt(resolved_dest, &dont_overwrite);
         if (!dont_overwrite) {
-          confirm_no_overwrite();
+          fwrite("not replaced\n", 1, 13, stderr);
           return LINK_SKIPPED;
         }
       }
@@ -150,6 +147,8 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
   }
 
   int r;
+  link_result_e ret = LINK_OK;
+
   if (flags.link_mode == LINK_HARD) {
     switch (flags.source_mode) {
     case SOURCE_SYMLINK_FOLLOW:
@@ -160,15 +159,25 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
       break;
     }
   } else if (flags.link_mode == LINK_SYMBOLIC) {
+    if (flags.warn_dangling_source) {
+      struct stat st;
+      errno = 0;
+      if (stat(source, &st) < 0) {
+        if (errno == ENOENT) {
+          ret = LINK_WARN;
+        }
+        ret = LINK_ERRNO;
+      }
+    }
     r = symlink(source, resolved_dest);
   } else {
     fprintf(stderr, "invalid link mode\n");
     exit(1);
   }
 
-  if (r < 0) {
+  if (r < 0 && ret != LINK_OK) {
     if (errno == EEXIST) return LINK_EXISTS;
-    return LINK_ERRNO;
+    return ret;
   }
 
   return LINK_OK;
@@ -303,6 +312,8 @@ int main(int argc, char *argv[]) {
       break;
     case LINK_SKIPPED:
       break;
+    case LINK_WARN:
+      error_msg(argv[0], source,
     }
   }
 
