@@ -105,7 +105,8 @@ int main(int argc, char *argv[]) {
   case MODE_SYMBOLIC:
     break;
   case MODE_BAD:
-    break;
+    error_msg(argv[0], "Invalid file mode", argv[optind]);
+    exit(2);
   }
 
   return 0;
