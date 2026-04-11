@@ -11,9 +11,10 @@
 #include <sys/unistd.h>
 #include <unistd.h>
 
+static const char *progname;
+
 typedef enum {
   LINK_OK,
-  LINK_WARN,
   LINK_EXISTS,
   LINK_ERRNO,
   LINK_SKIPPED,
@@ -115,6 +116,20 @@ static int prompt(const char *dest, bool *overwrite) {
   return 0;
 }
 
+static bool source_dangles_for_dest(const char *source, const char *resolved_dest) {
+  struct stat st;
+
+  bool is_absolute = source[0] == '/';
+  if (is_absolute) {
+    if (stat(source, &st) < 0) {
+      if (errno == ENOENT) return true;
+    }
+  } else {
+  }
+
+  return false;
+}
+
 static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
   path_class_t class = {0};
   if (flags.replace_mode != REPLACE_DEFAULT) {
@@ -147,7 +162,6 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
   }
 
   int r;
-  bool warn_dangling = false;
   if (flags.link_mode == LINK_HARD) {
     switch (flags.source_mode) {
     case SOURCE_SYMLINK_FOLLOW:
@@ -159,12 +173,6 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
     }
   } else if (flags.link_mode == LINK_SYMBOLIC) {
     if (flags.warn_dangling_source) {
-      struct stat st;
-      if (stat(source, &st) < 0) {
-        if (errno == ENOENT) {
-          warn_dangling = true;
-        }
-      }
     }
     r = symlink(source, resolved_dest);
   } else {
@@ -176,7 +184,6 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
     if (errno == EEXIST) return LINK_EXISTS;
     return LINK_ERRNO;
   }
-  if (warn_dangling) return LINK_WARN;
   return LINK_OK;
 }
 
@@ -209,6 +216,8 @@ static link_result_e ln_target_dir(const char *source, const char *dest,
 }
 
 int main(int argc, char *argv[]) {
+  progname = argv[0];
+
   int ch;
   flags_t flags = {
       .link_mode = LINK_HARD,
@@ -252,7 +261,7 @@ int main(int argc, char *argv[]) {
       flags.verbose = true;
       break;
     default:
-      usage(argv[0]);
+      usage(progname);
     }
   }
 
@@ -261,27 +270,27 @@ int main(int argc, char *argv[]) {
   }
 
   if (flags.link_mode == LINK_SYMBOLIC && flags.source_mode != SOURCE_SYMLINK_FOLLOW) {
-    usage(argv[0]);
+    usage(progname);
   }
 
   if (flags.link_mode != LINK_SYMBOLIC && flags.force_target_directory) {
-    usage(argv[0]);
+    usage(progname);
   }
 
   if (flags.link_mode != LINK_SYMBOLIC && flags.warn_dangling_source) {
-    usage(argv[0]);
+    usage(progname);
   }
 
   int num_args = argc - optind;
   if (num_args < 2) usage(argv[0]);
   path_class_t class = {0};
   if (classify_path(argv[argc - 1], &class) < 0) {
-    error_errno(argv[0], argv[argc - 1]);
+    error_errno(progname, argv[argc - 1]);
     exit(2);
   }
 
   bool is_dir = target_acts_as_dir(&class, flags);
-  if (num_args > 2 && !is_dir) usage(argv[0]);
+  if (num_args > 2 && !is_dir) usage(progname);
 
   int ret = 0;
   for (int i = optind; i < argc - 1; i++) {
@@ -301,19 +310,14 @@ int main(int argc, char *argv[]) {
       break;
     case LINK_ERRNO:
       ret = 1;
-      error_errno(argv[0], attempted_dest);
+      error_errno(progname, attempted_dest);
       break;
     case LINK_EXISTS:
       ret = 1;
-      error_msg(argv[0], attempted_dest, "File exists");
+      error_msg(progname, attempted_dest, "File exists");
       break;
     case LINK_SKIPPED:
       break;
-    case LINK_WARN: {
-      char buf[PATH_MAX];
-      snprintf(buf, PATH_MAX, "warning: %s", argv[i]);
-      error_msg(argv[0], buf, "No such file or directory");
-    }
     }
   }
 
