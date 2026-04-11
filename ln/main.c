@@ -133,7 +133,6 @@ static bool source_dangles_for_dest(const char *source, const char *resolved_des
   }
 
   return stat(check_path, &st) < 0 && errno == ENOENT;
-  return false;
 }
 
 static link_result_e ln_at_path(const char *source, const char *resolved_dest, flags_t flags) {
