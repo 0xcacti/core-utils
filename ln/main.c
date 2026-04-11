@@ -180,7 +180,8 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
   } else if (flags.link_mode == LINK_SYMBOLIC) {
     if (flags.warn_dangling_source && source_dangles_for_dest(source, resolved_dest)) {
       char buf[PATH_MAX];
-      snprintf(buf, PATH_MAX, "%s: 
+      snprintf(buf, PATH_MAX, "warning: %s", source);
+      error_msg(progname, buf, "No such file or directory");
     }
     r = symlink(source, resolved_dest);
   } else {
