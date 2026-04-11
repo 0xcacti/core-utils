@@ -118,15 +118,21 @@ static int prompt(const char *dest, bool *overwrite) {
 
 static bool source_dangles_for_dest(const char *source, const char *resolved_dest) {
   struct stat st;
+  if (source[0] == '/') return stat(source, &st) < 0 && errno == ENOENT;
 
-  bool is_absolute = source[0] == '/';
-  if (is_absolute) {
-    if (stat(source, &st) < 0) {
-      if (errno == ENOENT) return true;
-    }
-  } else {
+  char dest_copy[PATH_MAX];
+  char check_path[PATH_MAX];
+
+  if (snprintf(dest_copy, sizeof dest_copy, "%s", resolved_dest) >= PATH_MAX) {
+    return false;
   }
 
+  char *parent = dirname(dest_copy);
+  if (snprintf(check_path, sizeof check_path, "%s/%s", parent, source) >= PATH_MAX) {
+    return false;
+  }
+
+  return stat(check_path, &st) < 0 && errno == ENOENT;
   return false;
 }
 
@@ -172,7 +178,9 @@ static link_result_e ln_at_path(const char *source, const char *resolved_dest, f
       break;
     }
   } else if (flags.link_mode == LINK_SYMBOLIC) {
-    if (flags.warn_dangling_source) {
+    if (flags.warn_dangling_source && source_dangles_for_dest(source, resolved_dest)) {
+      char buf[PATH_MAX];
+      snprintf(buf, PATH_MAX, "%s: 
     }
     r = symlink(source, resolved_dest);
   } else {
