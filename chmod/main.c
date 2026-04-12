@@ -27,6 +27,14 @@ typedef enum {
   MODE_BAD,
 } mode_form_e;
 
+typedef struct {
+  mode_form_e form;
+  int user;
+  int group;
+  int other;
+  int all;
+} parsed_mode_t;
+
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-fhv] [-R [-H | -L | -P]] mode file ...\n", progname);
   exit(2);
