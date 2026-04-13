@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 typedef enum {
@@ -29,6 +30,8 @@ typedef enum {
 
 typedef struct {
   mode_form_e form;
+  bool setuid;
+  bool setgid;
   int user;
   int group;
   int other;
@@ -40,9 +43,9 @@ static void usage(const char *progname) {
   exit(2);
 }
 
-static void error_errno(const char *progname, const char *filename) {
-  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
-}
+// static void error_errno(const char *progname, const char *filename) {
+//   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
+// }
 
 static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
@@ -69,9 +72,10 @@ static mode_form_e parse_mode(const char *mode) {
   }
 }
 
-// static void parse_octal(const char *mode) {
-//   return;
-// }
+static bool parse_octal(const char *mode, mode_t *out) {
+  char *end;
+  unsigned long value;
+  if (s == NULL || *s == '\0') }
 
 int main(int argc, char *argv[]) {
   int ch;
