@@ -72,10 +72,25 @@ static mode_form_e parse_mode(const char *mode) {
   }
 }
 
-static bool parse_octal(const char *mode, mode_t *out) {
+static int parse_octal(const char *s, mode_t *out) {
   char *end;
   unsigned long value;
-  if (s == NULL || *s == '\0') }
+  if (s == NULL || *s == '\0') {
+    return -1;
+  }
+
+  for (const char *c = s; *c != '\0'; c++) {
+    if (*c < '0' || *c > '7') return -1;
+  }
+
+  errno = 0;
+  value = strtoul(s, &end, 8);
+  if (errno != 0 || *end != '\0') return -1;
+  if (value > 07777UL) return -1;
+
+  *out = (mode_t)value;
+  return 0;
+}
 
 int main(int argc, char *argv[]) {
   int ch;
@@ -110,16 +125,12 @@ int main(int argc, char *argv[]) {
   }
 
   mode_form_e mode = parse_mode(argv[optind]);
-
-  switch (mode) {
-  case MODE_OCTAL:
-    break;
-  case MODE_SYMBOLIC:
-    break;
-  case MODE_BAD:
+  if (mode == MODE_BAD) {
     error_msg(argv[0], "Invalid file mode", argv[optind]);
     exit(2);
   }
 
-  return 0;
+  mode_t =
+
+      return 0;
 }
