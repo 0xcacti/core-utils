@@ -26,10 +26,10 @@ typedef enum {
   MODE_OCTAL,
   MODE_SYMBOLIC,
   MODE_BAD,
-} mode_form_e;
+} update_mode_e;
 
 typedef struct {
-  mode_form_e form;
+  update_mode_e form;
   bool setuid;
   bool setgid;
   int user;
@@ -51,7 +51,7 @@ static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
 }
 
-static mode_form_e parse_mode(const char *mode) {
+static update_mode_e parse_mode(const char *mode) {
   switch (mode[0]) {
   case 'u':
   case 'g':
@@ -124,13 +124,16 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  mode_form_e mode = parse_mode(argv[optind]);
+  int num_args = argc - optind;
+
+  update_mode_e mode = parse_mode(argv[optind]);
   if (mode == MODE_BAD) {
     error_msg(argv[0], "Invalid file mode", argv[optind]);
     exit(2);
   }
 
-  mode_t =
+  for (int i = optind + 1;) {
+  }
 
-      return 0;
+  return 0;
 }
