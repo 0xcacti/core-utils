@@ -43,13 +43,21 @@ static void usage(const char *progname) {
   exit(2);
 }
 
-// static void error_errno(const char *progname, const char *filename) {
-//   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
-// }
+static void error_errno(const char *progname, const char *filename) {
+  dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, filename, strerror(errno));
+}
 
 static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
 }
+
+// static int current_mode(const char *file, mode_t *out) {
+//   struct stat st;
+//   int r = stat(file, &st);
+//   if (r < 0) return -1;
+//   *out = st.st_mode & 07777;
+//   return 0;
+// }
 
 static update_mode_e parse_mode(const char *mode) {
   switch (mode[0]) {
@@ -125,14 +133,23 @@ int main(int argc, char *argv[]) {
   }
 
   int num_args = argc - optind;
+  if (num_args < 2) usage(argv[0]);
 
-  update_mode_e mode = parse_mode(argv[optind]);
-  if (mode == MODE_BAD) {
+  update_mode_e mode_form = parse_mode(argv[optind]);
+  if (mode_form == MODE_BAD) {
     error_msg(argv[0], "Invalid file mode", argv[optind]);
     exit(2);
   }
 
-  for (int i = optind + 1;) {
+  mode_t new = {0};
+  if (mode_form == MODE_OCTAL) {
+    if (parse_octal(argv[optind], &new) < 0) error_msg(argv[0], "Invalid file mode", argv[optind]);
+    for (int i = optind + 1; i < argc; i++) {
+      if (chmod(argv[i], new) < 0) error_errno(argv[0], argv[i]);
+    }
+  } else if (mode_form == MODE_SYMBOLIC) {
+    fprintf(stdout, "Not supported yet!!\n");
+    exit(1);
   }
 
   return 0;
