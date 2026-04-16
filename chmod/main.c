@@ -106,7 +106,7 @@ static int parse_octal(const char *s, mode_t *out) {
   return 0;
 }
 
-static int target_mode(const char *mode_str, const char *f, mode_t *out) {
+static chmod_result_e target_mode(const char *mode_str, const char *f, mode_t *out) {
   update_mode_e mode_form = parse_mode(mode_str);
   if (mode_form == MODE_BAD) return CHMOD_BAD_MODE;
 
@@ -118,6 +118,19 @@ static int target_mode(const char *mode_str, const char *f, mode_t *out) {
     exit(1);
   }
 
+  return CHMOD_OK;
+}
+
+static chmod_result_e chmod_target(const char *file, mode_t new_mode, flags_t flags) {
+  struct stat st;
+  if (stat(file, &st) < 0) {
+    return CHMOD_ERRNO;
+  }
+
+  bool is_link = S_ISLNK(st.st_mode);
+  bool is_dir = S_ISDIR(st.st_mode);
+
+  if (chmod(file, new_mode) < 0) return CHMOD_ERRNO;
   return CHMOD_OK;
 }
 
@@ -169,10 +182,19 @@ int main(int argc, char *argv[]) {
     case CHMOD_OK:
       break;
     }
-    if (chmod(argv[i], target) < 0) {
-      error_errno(argv[0], argv[i]);
-    } else {
+
+    r = chmod_target(argv[i], target);
+    switch (r) {
+    case CHMOD_OK:
       if (flags.verbose) fprintf(stdout, "%s\n", argv[i]);
+      break;
+    case CHMOD_ERRNO:
+      error_errno(argv[0], argv[optind]);
+      break;
+    case CHMOD_BAD_MODE:
+    default:
+      fprintf(stdout, "This should be unreachable\n");
+      break;
     }
   }
 
