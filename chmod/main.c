@@ -38,6 +38,11 @@ typedef struct {
   int all;
 } parsed_mode_t;
 
+typedef enum {
+  CHMOD_ERRNO,
+  CHMOD_BAD_MODE,
+} chmod_result_e;
+
 static void usage(const char *progname) {
   dprintf(STDERR_FILENO, "%s [-fhv] [-R [-H | -L | -P]] mode file ...\n", progname);
   exit(2);
@@ -100,6 +105,20 @@ static int parse_octal(const char *s, mode_t *out) {
   return 0;
 }
 
+static int target_mode(const char *mode_str, const char *f, mode_t *out) {
+  update_mode_e mode_form = parse_mode(mode_str);
+  if (mode_form == MODE_BAD) return CHMOD_BAD_MODE;
+
+  if (mode_form == MODE_OCTAL) {
+    if (parse_octal(f, out) < 0) return CHMOD_BAD_MODE;
+    return 0;
+  } else if (mode_form == MODE_SYMBOLIC) {
+    fprintf(stdout, "Not supported yet!!\n");
+    exit(1);
+  }
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   int ch;
   flags_t flags = {0};
@@ -135,21 +154,22 @@ int main(int argc, char *argv[]) {
   int num_args = argc - optind;
   if (num_args < 2) usage(argv[0]);
 
-  update_mode_e mode_form = parse_mode(argv[optind]);
-  if (mode_form == MODE_BAD) {
-    error_msg(argv[0], "Invalid file mode", argv[optind]);
-    exit(2);
-  }
-
-  mode_t new = {0};
-  if (mode_form == MODE_OCTAL) {
-    if (parse_octal(argv[optind], &new) < 0) error_msg(argv[0], "Invalid file mode", argv[optind]);
-    for (int i = optind + 1; i < argc; i++) {
-      if (chmod(argv[i], new) < 0) error_errno(argv[0], argv[i]);
+  for (int i = optind + 1; i < argc; i++) {
+    mode_t target = {0};
+    chmod_result_e r = target_mode(argv[optind], argv[i], &target);
+    switch (r) {
+    case CHMOD_BAD_MODE:
+      error_msg(argv[0], "Invalid file mode", argv[optind]);
+      break;
+    case CHMOD_ERRNO:
+      error_errno(argv[0], argv[optind]);
+      break;
     }
-  } else if (mode_form == MODE_SYMBOLIC) {
-    fprintf(stdout, "Not supported yet!!\n");
-    exit(1);
+    if (chmod(argv[i], target) < 0) {
+      error_errno(argv[0], argv[i]);
+    } else {
+      if (flags.verbose) fprintf(stdout, "%s\n", argv[i]);
+    }
   }
 
   return 0;
