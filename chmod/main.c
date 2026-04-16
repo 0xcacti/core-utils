@@ -39,6 +39,7 @@ typedef struct {
 } parsed_mode_t;
 
 typedef enum {
+  CHMOD_OK,
   CHMOD_ERRNO,
   CHMOD_BAD_MODE,
 } chmod_result_e;
@@ -116,7 +117,8 @@ static int target_mode(const char *mode_str, const char *f, mode_t *out) {
     fprintf(stdout, "Not supported yet!!\n");
     exit(1);
   }
-  return 0;
+
+  return CHMOD_OK;
 }
 
 int main(int argc, char *argv[]) {
@@ -163,6 +165,8 @@ int main(int argc, char *argv[]) {
       break;
     case CHMOD_ERRNO:
       error_errno(argv[0], argv[optind]);
+      break;
+    case CHMOD_OK:
       break;
     }
     if (chmod(argv[i], target) < 0) {
