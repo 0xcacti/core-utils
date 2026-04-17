@@ -133,8 +133,36 @@ static chmod_result_e chmod_file(const char *file, mode_t new_mode, flags_t flag
 }
 
 static chmod_result_e chmod_dir(const char *file, mode_t new_mode, flags_t flags) {
-  fprintf(stdout, "not implemented yet\n");
-  return CHMOD_OK;
+  int fts_flags = FTS_NOCHDIR;
+  switch (flags.sym_mode) {
+  case SYMLINK_NONE:
+    fts_flags |= FTS_PHYSICAL;
+    break;
+  case SYMLINK_CMD:
+    fts_flags |= FTS_PHYSICAL | FTS_COMFOLLOW;
+    break;
+  case SYMLINK_ALL:
+    fts_flags |= FTS_LOGICAL;
+    break;
+  }
+
+  char *paths[2];
+  paths[0] = (char *)file;
+  paths[1] = NULL;
+
+  FTS *fts = fts_open(paths, fts_flags, NULL);
+  if (fts == NULL) return CHMOD_ERRNO;
+  enum { SKIPPED = 1 };
+
+  chmod_result_e ret = CHMOD_OK;
+  FTSENT *ent = NULL;
+  while ((ent = fts_read(fts)) != NULL) {
+    switch (ent->fts_info) {}
+  }
+
+  if (fts_close(fts) < 0 && !flags.force) return CHMOD_ERRNO;
+
+  return ret;
 }
 
 static chmod_result_e chmod_target(const char *file, mode_t new_mode, flags_t flags) {
