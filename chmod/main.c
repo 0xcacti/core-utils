@@ -1,9 +1,11 @@
 #include <errno.h>
+#include <fts.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -111,9 +113,9 @@ static chmod_result_e target_mode(const char *mode_str, const char *f, mode_t *o
   if (mode_form == MODE_BAD) return CHMOD_BAD_MODE;
 
   if (mode_form == MODE_OCTAL) {
-    if (parse_octal(f, out) < 0) return CHMOD_BAD_MODE;
-    return 0;
+    if (parse_octal(mode_str, out) < 0) return CHMOD_BAD_MODE;
   } else if (mode_form == MODE_SYMBOLIC) {
+    (void)f;
     fprintf(stdout, "Not supported yet!!\n");
     exit(1);
   }
@@ -121,17 +123,40 @@ static chmod_result_e target_mode(const char *mode_str, const char *f, mode_t *o
   return CHMOD_OK;
 }
 
+static chmod_result_e chmod_file(const char *file, mode_t new_mode, flags_t flags) {
+  if (flags.no_follow) {
+    if (fchmodat(AT_FDCWD, file, new_mode, AT_SYMLINK_NOFOLLOW) < 0) return CHMOD_ERRNO;
+  } else {
+    if (chmod(file, new_mode) < 0) return CHMOD_ERRNO;
+  }
+  return CHMOD_OK;
+}
+
+static chmod_result_e chmod_dir(const char *file, mode_t new_mode, flags_t flags) {
+  fprintf(stdout, "not implemented yet\n");
+  return CHMOD_OK;
+}
+
 static chmod_result_e chmod_target(const char *file, mode_t new_mode, flags_t flags) {
+  int r = 0;
   struct stat st;
-  if (stat(file, &st) < 0) {
-    return CHMOD_ERRNO;
+  if (!flags.recurse) return chmod_file(file, new_mode, flags);
+  if (flags.sym_mode == SYMLINK_ALL) {
+    r = stat(file, &st);
+  } else {
+    r = lstat(file, &st);
   }
 
-  bool is_link = S_ISLNK(st.st_mode);
-  bool is_dir = S_ISDIR(st.st_mode);
+  if (r < 0) return CHMOD_ERRNO;
 
-  if (chmod(file, new_mode) < 0) return CHMOD_ERRNO;
-  return CHMOD_OK;
+  if (S_ISDIR(st.st_mode)) return chmod_dir(file, new_mode, flags);
+  if (flags.sym_mode == SYMLINK_CMD && S_ISLNK(st.st_mode)) {
+    struct stat target_st;
+    if (stat(file, &target_st) < 0) return CHMOD_ERRNO;
+    if (S_ISDIR(target_st.st_mode)) chmod_dir(file, new_mode, flags);
+  }
+
+  return chmod_file(file, new_mode, flags);
 }
 
 int main(int argc, char *argv[]) {
@@ -169,27 +194,33 @@ int main(int argc, char *argv[]) {
   int num_args = argc - optind;
   if (num_args < 2) usage(argv[0]);
 
+  int ret = 0;
   for (int i = optind + 1; i < argc; i++) {
     mode_t target = {0};
     chmod_result_e r = target_mode(argv[optind], argv[i], &target);
     switch (r) {
     case CHMOD_BAD_MODE:
       error_msg(argv[0], "Invalid file mode", argv[optind]);
+      exit(2);
       break;
     case CHMOD_ERRNO:
-      error_errno(argv[0], argv[optind]);
+      // this should be impossible at this junction
+      fprintf(stdout, "This should be unreachable\n");
       break;
     case CHMOD_OK:
       break;
     }
 
-    r = chmod_target(argv[i], target);
+    r = chmod_target(argv[i], target, flags);
     switch (r) {
     case CHMOD_OK:
       if (flags.verbose) fprintf(stdout, "%s\n", argv[i]);
       break;
     case CHMOD_ERRNO:
-      error_errno(argv[0], argv[optind]);
+      if (!flags.force) {
+        error_errno(argv[0], argv[i]);
+        ret = 1;
+      }
       break;
     case CHMOD_BAD_MODE:
     default:
@@ -198,5 +229,5 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  return 0;
+  return ret;
 }
