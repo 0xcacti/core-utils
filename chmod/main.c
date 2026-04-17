@@ -59,14 +59,6 @@ static void error_msg(const char *progname, const char *m1, const char *m2) {
   dprintf(STDERR_FILENO, "%s: %s: %s\n", progname, m1, m2);
 }
 
-// static int current_mode(const char *file, mode_t *out) {
-//   struct stat st;
-//   int r = stat(file, &st);
-//   if (r < 0) return -1;
-//   *out = st.st_mode & 07777;
-//   return 0;
-// }
-
 static update_mode_e parse_mode(const char *mode) {
   switch (mode[0]) {
   case 'u':
@@ -157,11 +149,29 @@ static chmod_result_e chmod_dir(const char *file, mode_t new_mode, flags_t flags
   chmod_result_e ret = CHMOD_OK;
   FTSENT *ent = NULL;
   while ((ent = fts_read(fts)) != NULL) {
-    switch (ent->fts_info) {}
+    switch (ent->fts_info) {
+    case FTS_F:
+    case FTS_D:
+    case FTS_DP:
+      if (chmod_file(ent->fts_accpath, new_mode, flags) != CHMOD_OK) {
+        if (!flags.force) ret = CHMOD_ERRNO;
+      }
+      break;
+
+    case FTS_SL:
+    case FTS_SLNONE:
+      break;
+
+    case FTS_DNR:
+    case FTS_ERR:
+    case FTS_NS:
+    case FTS_DC:
+      if (!flags.force) ret = CHMOD_ERRNO;
+      break;
+    }
   }
 
   if (fts_close(fts) < 0 && !flags.force) return CHMOD_ERRNO;
-
   return ret;
 }
 
