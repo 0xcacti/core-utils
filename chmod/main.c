@@ -250,6 +250,37 @@ static chmod_result_e parse_mode_update(const char *mode_str, mode_update_t *out
   return CHMOD_OK;
 }
 
+static mode_t who_clear_mask(unsigned who_mask) {
+  mode_t mask = 0;
+  if ((who_mask & WHO_U) != 0) mask |= 0700;
+  if ((who_mask & WHO_G) != 0) mask |= 0070;
+  if ((who_mask & WHO_O) != 0) mask |= 0007;
+  return mask;
+}
+
+static mode_t who_set_mask(unsigned who_mask, unsigned perm_mask) {
+  mode_t mask = 0;
+  if ((who_mask & WHO_U) != 0) {
+    if ((perm_mask & PERM_R) != 0) mask |= 0400;
+    if ((perm_mask & PERM_W) != 0) mask |= 0200;
+    if ((perm_mask & PERM_X) != 0) mask |= 0100;
+  }
+
+  if ((who_mask & WHO_G) != 0) {
+    if ((perm_mask & PERM_R) != 0) mask |= 0040;
+    if ((perm_mask & PERM_W) != 0) mask |= 0020;
+    if ((perm_mask & PERM_X) != 0) mask |= 0010;
+  }
+
+  if ((who_mask & WHO_O) != 0) {
+    if ((perm_mask & PERM_R) != 0) mask |= 0004;
+    if ((perm_mask & PERM_W) != 0) mask |= 0002;
+    if ((perm_mask & PERM_X) != 0) mask |= 0001;
+  }
+
+  return mask;
+}
+
 static int compute_target_mode(const mode_update_t *update, mode_t old_mode, mode_t *out) {
   if (update->kind == MODE_OCTAL) {
     *out = update->octal_mode;
@@ -257,10 +288,23 @@ static int compute_target_mode(const mode_update_t *update, mode_t old_mode, mod
   }
 
   mode_t new_mode = old_mode & 07777;
+
   for (size_t i = 0; i < update->clause_count; i++) {
     symbolic_clause_t clause = update->clauses[i];
     mode_t clear_mask = who_clear_mask(clause.who_mask);
-    mode_t set_mask = who_set_mask(clause, who_mask, clause.perm_mask);
+    mode_t set_mask = who_set_mask(clause.who_mask, clause.perm_mask);
+
+    switch (clause.op) {
+    case OP_ADD:
+      new_mode |= set_mask;
+      break;
+    case OP_REMOVE:
+      new_mode &= ~set_mask;
+      break;
+    case OP_SET:
+      new_mode = (new_mode & ~clear_mask) | set_mask;
+      break;
+    }
   }
 
   *out = new_mode;
