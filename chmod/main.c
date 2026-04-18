@@ -30,37 +30,53 @@ typedef enum {
   MODE_BAD,
 } update_mode_e;
 
-// typedef enum {
-//   OP_ADD,
-//   OP_REMOVE,
-//   OP_SET,
-// } symbolic_op_e;
-//
-// enum {
-//   WHO_U = 1 << 0,
-//   WHO_G = 1 << 1,
-//   WHO_O = 1 << 2,
-//   WHO_A = WHO_U | WHO_G | WHO_O,
-// };
-//
-// enum {
-//   PERM_R = 1 << 0,
-//   PERM_W = 1 << 1,
-//   PERM_X = 1 << 2,
-// };
-//
-// typedef struct {
-//   unsigned who_mask;
-//   symbolic_op_e op;
-//   unsigned perm_mask;
-// } symbolic_clause_t;
+typedef enum {
+  OP_ADD,
+  OP_REMOVE,
+  OP_SET,
+} symbolic_op_e;
+
+enum {
+  WHO_U = 1 << 0,
+  WHO_G = 1 << 1,
+  WHO_O = 1 << 2,
+  WHO_A = WHO_U | WHO_G | WHO_O,
+};
+
+enum {
+  PERM_R = 1 << 0,
+  PERM_W = 1 << 1,
+  PERM_X = 1 << 2,
+};
+
+typedef struct {
+  unsigned who_mask;
+  symbolic_op_e op;
+  unsigned perm_mask;
+} symbolic_clause_t;
 
 typedef struct {
   update_mode_e kind;
   mode_t octal_mode;
-  // symbolic_clause_t *clauses;
-  // size_t clause_count;
+  symbolic_clause_t *clauses;
+  size_t clause_count;
 } mode_update_t;
+
+static int push_clause(mode_update_t *out, symbolic_clause_t clause) {
+  size_t new_count = out->clause_count + 1;
+  symbolic_clause_t *new_clauses = realloc(out->clauses, new_count * sizeof(*new_clauses));
+  if (new_clauses == NULL) return -1;
+  out->clauses = new_clauses;
+  out->clauses[out->clause_count] = clause;
+  out->clause_count = new_count;
+  return 0;
+}
+
+static void free_mode_update(mode_update_t *mu) {
+  free(mu->clauses);
+  mu->clauses = NULL;
+  mu->clause_count = 0;
+}
 
 typedef struct {
   update_mode_e form;
@@ -132,6 +148,92 @@ static int parse_octal(const char *s, mode_t *out) {
   return 0;
 }
 
+static int parse_who(const char **mode_str, unsigned *out) {
+  const char *s = *mode_str;
+  unsigned who = 0;
+  while (*s == 'u' || *s == 'g' || *s == 'o' || *s == 'a') {
+    switch (*s) {
+    case 'u':
+      who |= WHO_U;
+      break;
+    case 'g':
+      who |= WHO_G;
+      break;
+    case 'o':
+      who |= WHO_O;
+      break;
+    case 'a':
+      who |= WHO_A;
+      break;
+    }
+    s++;
+  }
+  if (who == 0) who = WHO_A;
+  *mode_str = s;
+  *out = who;
+  return 0;
+}
+
+static int parse_op(const char **mode_str, symbolic_op_e *out) {
+  switch (**mode_str) {
+  case '+':
+    *out = OP_ADD;
+    break;
+  case '-':
+    *out = OP_REMOVE;
+    break;
+  case '=':
+    *out = OP_SET;
+    break;
+  default:
+    return -1;
+  }
+  (*mode_str)++;
+  return 0;
+}
+
+static int parse_perm(const char **mode_str, unsigned *out) {
+  const char *s = *mode_str;
+  unsigned perm = 0;
+  if (*s != 'r' && *s != 'w' && *s != 'x') return -1;
+  while (*s == 'r' || *s != 'w' || *s != 'x') {
+    switch (*s) {
+    case 'r':
+      perm |= PERM_R;
+      break;
+    case 'w':
+      perm |= PERM_W;
+      break;
+    case 'x':
+      perm |= PERM_X;
+      break;
+    }
+    s++;
+  }
+  *mode_str = s;
+  *out = perm;
+  return 0;
+}
+
+static int parse_symbolic(const char *mode_str, mode_update_t *out) {
+  out->kind = MODE_SYMBOLIC;
+  out->octal_mode = 0;
+  out->clauses = NULL;
+  out->clause_count = 0;
+  while (*mode_str != '\0') {
+    symbolic_clause_t clause = {0};
+    if (parse_who(&mode_str, &clause.who_mask) < 0) return -1;
+    if (parse_op(&mode_str, &clause.op) < 0) return -1;
+    if (parse_perm(&mode_str, &clause.perm_mask) < 0) return -1;
+    if (push_clause(out, clause) < 0) return -1;
+    if (*mode_str == '\0') break;
+    if (*mode_str != ',') return -1;
+    mode_str++;
+  }
+
+  return 0;
+}
+
 static chmod_result_e parse_mode_update(const char *mode_str, mode_update_t *out) {
   update_mode_e mode_form = parse_mode(mode_str);
   if (mode_form == MODE_BAD) return CHMOD_BAD_MODE;
@@ -141,7 +243,9 @@ static chmod_result_e parse_mode_update(const char *mode_str, mode_update_t *out
     if (parse_octal(mode_str, &out->octal_mode) < 0) return CHMOD_BAD_MODE;
     return CHMOD_OK;
   }
-  return CHMOD_BAD_MODE;
+
+  if (parse_symbolic(mode_str, out) < 0) return CHMOD_BAD_MODE;
+  return CHMOD_OK;
 }
 
 static int compute_target_mode(const mode_update_t *update, mode_t old_mode, mode_t *out) {
