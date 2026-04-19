@@ -59,6 +59,7 @@ typedef struct {
 typedef struct {
   update_mode_e kind;
   mode_t octal_mode;
+  mode_t creation_mask;
   symbolic_clause_t *clauses;
   size_t clause_count;
 } mode_update_t;
@@ -104,6 +105,9 @@ static update_mode_e parse_mode(const char *mode) {
   case 'g':
   case 'a':
   case 'o':
+  case '+':
+  case '-':
+  case '=':
     return MODE_SYMBOLIC;
   case '0':
   case '1':
@@ -231,7 +235,6 @@ static chmod_result_e parse_mode_update(const char *mode_str, mode_update_t *out
   update_mode_e mode_form = parse_mode(mode_str);
   if (mode_form == MODE_BAD) return CHMOD_BAD_MODE;
 
-  memset(out, 0, sizeof(*out));
   out->kind = mode_form;
 
   if (mode_form == MODE_OCTAL) {
@@ -284,8 +287,18 @@ static void compute_target_mode(const mode_update_t *update, mode_t old_mode, mo
 
   for (size_t i = 0; i < update->clause_count; i++) {
     symbolic_clause_t clause = update->clauses[i];
-    mode_t clear_mask = who_clear_mask(clause.who_mask);
-    mode_t set_mask = who_set_mask(clause.who_mask, clause.perm_mask);
+
+    mode_t clear_mask;
+    mode_t set_mask;
+    if (clause.who_omitted) {
+      mode_t all_bits = who_set_mask(WHO_A, clause.perm_mask);
+      mode_t effective_bits = all_bits & ~update->creation_mask;
+      clear_mask = effective_bits;
+      set_mask = effective_bits;
+    } else {
+      clear_mask = who_clear_mask(clause.who_mask);
+      set_mask = who_set_mask(clause.who_mask, clause.perm_mask);
+    }
 
     switch (clause.op) {
     case OP_ADD:
@@ -428,7 +441,10 @@ int main(int argc, char *argv[]) {
   if (num_args < 2) usage(argv[0]);
 
   int ret = 0;
-  mode_update_t update = {0};
+
+  mode_t creation_mask = umask(0);
+  umask(creation_mask);
+  mode_update_t update = {0, .creation_mask = creation_mask};
   chmod_result_e parse_result = parse_mode_update(argv[optind], &update);
   switch (parse_result) {
   case CHMOD_BAD_MODE:
