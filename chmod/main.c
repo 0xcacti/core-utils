@@ -468,7 +468,8 @@ int main(int argc, char *argv[]) {
     exit(2);
     break;
   case CHMOD_ERRNO:
-    abort();
+    fprintf(stderr, "This should be unreachable\n");
+    exit(1);
     break;
   case CHMOD_OK:
     break;
@@ -488,7 +489,8 @@ int main(int argc, char *argv[]) {
       break;
     case CHMOD_BAD_MODE:
     default:
-      fprintf(stdout, "This should be unreachable\n");
+      fprintf(stderr, "This should be unreachable\n");
+      exit(1);
       break;
     }
   }
