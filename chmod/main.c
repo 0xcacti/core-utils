@@ -50,6 +50,7 @@ enum {
 };
 
 typedef struct {
+  bool who_omitted;
   unsigned who_mask;
   symbolic_op_e op;
   unsigned perm_mask;
@@ -77,16 +78,6 @@ static void free_mode_update(mode_update_t *mu) {
   mu->clauses = NULL;
   mu->clause_count = 0;
 }
-
-typedef struct {
-  update_mode_e form;
-  bool setuid;
-  bool setgid;
-  int user;
-  int group;
-  int other;
-  int all;
-} parsed_mode_t;
 
 typedef enum {
   CHMOD_OK,
@@ -148,9 +139,10 @@ static int parse_octal(const char *s, mode_t *out) {
   return 0;
 }
 
-static int parse_who(const char **mode_str, unsigned *out) {
+static int parse_who(const char **mode_str, unsigned *out, bool *omitted) {
   const char *s = *mode_str;
   unsigned who = 0;
+  *omitted = false;
   while (*s == 'u' || *s == 'g' || *s == 'o' || *s == 'a') {
     switch (*s) {
     case 'u':
@@ -168,7 +160,7 @@ static int parse_who(const char **mode_str, unsigned *out) {
     }
     s++;
   }
-  if (who == 0) who = WHO_A;
+  if (who == 0) *omitted = true;
   *mode_str = s;
   *out = who;
   return 0;
@@ -196,6 +188,7 @@ static int parse_perm(const char **mode_str, unsigned *out) {
   const char *s = *mode_str;
   unsigned perm = 0;
   if (*s != 'r' && *s != 'w' && *s != 'x') return -1;
+
   while (*s == 'r' || *s == 'w' || *s == 'x') {
     switch (*s) {
     case 'r':
@@ -222,7 +215,7 @@ static int parse_symbolic(const char *mode_str, mode_update_t *out) {
   out->clause_count = 0;
   while (*mode_str != '\0') {
     symbolic_clause_t clause = {0};
-    if (parse_who(&mode_str, &clause.who_mask) < 0) return -1;
+    if (parse_who(&mode_str, &clause.who_mask, &clause.who_omitted) < 0) return -1;
     if (parse_op(&mode_str, &clause.op) < 0) return -1;
     if (parse_perm(&mode_str, &clause.perm_mask) < 0) return -1;
     if (push_clause(out, clause) < 0) return -1;
@@ -281,10 +274,10 @@ static mode_t who_set_mask(unsigned who_mask, unsigned perm_mask) {
   return mask;
 }
 
-static int compute_target_mode(const mode_update_t *update, mode_t old_mode, mode_t *out) {
+static void compute_target_mode(const mode_update_t *update, mode_t old_mode, mode_t *out) {
   if (update->kind == MODE_OCTAL) {
     *out = update->octal_mode;
-    return 0;
+    return;
   }
 
   mode_t new_mode = old_mode & 07777;
@@ -308,12 +301,11 @@ static int compute_target_mode(const mode_update_t *update, mode_t old_mode, mod
   }
 
   *out = new_mode;
-  return 0;
 }
 
 static chmod_result_e chmod_file(const char *file, mode_t new_mode, flags_t flags) {
   if (flags.no_follow) {
-    if (fchmodat(AT_FDCWD, file, new_mode, AT_SYMLINK_NOFOLLOW) < 0) return CHMOD_ERRNO;
+    if (lchmod(file, new_mode) < 0) return CHMOD_ERRNO;
   } else {
     if (chmod(file, new_mode) < 0) return CHMOD_ERRNO;
   }
@@ -340,7 +332,6 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
 
   FTS *fts = fts_open(paths, fts_flags, NULL);
   if (fts == NULL) return CHMOD_ERRNO;
-  enum { SKIPPED = 1 };
 
   chmod_result_e ret = CHMOD_OK;
   FTSENT *ent = NULL;
@@ -349,11 +340,7 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
     case FTS_F:
     case FTS_DP: {
       mode_t new_mode;
-      if (compute_target_mode(mu, ent->fts_statp->st_mode, &new_mode) < 0) {
-        if (!flags.force) ret = CHMOD_ERRNO;
-        break;
-      }
-
+      compute_target_mode(mu, ent->fts_statp->st_mode, &new_mode);
       if (chmod_file(ent->fts_accpath, new_mode, flags) != CHMOD_OK) {
         if (!flags.force) ret = CHMOD_ERRNO;
       }
@@ -401,7 +388,7 @@ static chmod_result_e chmod_target(const char *file, mode_update_t *mu, flags_t 
     }
   }
 
-  if (compute_target_mode(mu, st.st_mode, &new_mode) < 0) return CHMOD_ERRNO;
+  compute_target_mode(mu, st.st_mode, &new_mode);
   return chmod_file(file, new_mode, flags);
 }
 
@@ -441,21 +428,21 @@ int main(int argc, char *argv[]) {
   if (num_args < 2) usage(argv[0]);
 
   int ret = 0;
-  for (int i = optind + 1; i < argc; i++) {
-    mode_update_t update = {0};
-    chmod_result_e parse_result = parse_mode_update(argv[optind], &update);
-    switch (parse_result) {
-    case CHMOD_BAD_MODE:
-      error_msg(argv[0], "Invalid file mode", argv[optind]);
-      exit(2);
-      break;
-    case CHMOD_ERRNO:
-      fprintf(stdout, "This should be unreachable\n");
-      break;
-    case CHMOD_OK:
-      break;
-    }
+  mode_update_t update = {0};
+  chmod_result_e parse_result = parse_mode_update(argv[optind], &update);
+  switch (parse_result) {
+  case CHMOD_BAD_MODE:
+    error_msg(argv[0], "Invalid file mode", argv[optind]);
+    exit(2);
+    break;
+  case CHMOD_ERRNO:
+    fprintf(stdout, "This should be unreachable\n");
+    break;
+  case CHMOD_OK:
+    break;
+  }
 
+  for (int i = optind + 1; i < argc; i++) {
     chmod_result_e r = chmod_target(argv[i], &update, flags);
     switch (r) {
     case CHMOD_OK:
@@ -474,5 +461,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  free_mode_update(&update);
   return ret;
 }
