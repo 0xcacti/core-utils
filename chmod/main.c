@@ -452,7 +452,7 @@ int main(int argc, char *argv[]) {
     exit(2);
     break;
   case CHMOD_ERRNO:
-    fprintf(stdout, "This should be unreachable\n");
+    abort();
     break;
   case CHMOD_OK:
     break;
