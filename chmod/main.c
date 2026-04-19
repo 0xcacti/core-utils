@@ -219,12 +219,28 @@ static int parse_symbolic(const char *mode_str, mode_update_t *out) {
   out->clause_count = 0;
   while (*mode_str != '\0') {
     symbolic_clause_t clause = {0};
-    if (parse_who(&mode_str, &clause.who_mask, &clause.who_omitted) < 0) return -1;
-    if (parse_op(&mode_str, &clause.op) < 0) return -1;
-    if (parse_perm(&mode_str, &clause.perm_mask) < 0) return -1;
-    if (push_clause(out, clause) < 0) return -1;
+    if (parse_who(&mode_str, &clause.who_mask, &clause.who_omitted) < 0) {
+      free_mode_update(out);
+      return -1;
+    }
+    if (parse_op(&mode_str, &clause.op) < 0) {
+      free_mode_update(out);
+      return -1;
+    }
+
+    if (parse_perm(&mode_str, &clause.perm_mask) < 0) {
+      free_mode_update(out);
+      return -1;
+    }
+    if (push_clause(out, clause) < 0) {
+      free_mode_update(out);
+      return -1;
+    }
     if (*mode_str == '\0') break;
-    if (*mode_str != ',') return -1;
+    if (*mode_str != ',') {
+      free_mode_update(out);
+      return -1;
+    }
     mode_str++;
   }
 
