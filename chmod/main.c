@@ -188,10 +188,11 @@ static int parse_op(const char **mode_str, symbolic_op_e *out) {
   return 0;
 }
 
-static int parse_perm(const char **mode_str, unsigned *out) {
+static int parse_perm(const char **mode_str, unsigned *out, bool allow_empty) {
   const char *s = *mode_str;
   unsigned perm = 0;
-  if (*s != 'r' && *s != 'w' && *s != 'x') return -1;
+
+  if (!allow_empty && *s != 'r' && *s != 'w' && *s != 'x') return -1;
 
   while (*s == 'r' || *s == 'w' || *s == 'x') {
     switch (*s) {
@@ -207,6 +208,7 @@ static int parse_perm(const char **mode_str, unsigned *out) {
     }
     s++;
   }
+
   *mode_str = s;
   *out = perm;
   return 0;
@@ -228,7 +230,7 @@ static int parse_symbolic(const char *mode_str, mode_update_t *out) {
       return -1;
     }
 
-    if (parse_perm(&mode_str, &clause.perm_mask) < 0) {
+    if (parse_perm(&mode_str, &clause.perm_mask, clause.op == OP_SET) < 0) {
       free_mode_update(out);
       return -1;
     }
@@ -307,10 +309,11 @@ static void compute_target_mode(const mode_update_t *update, mode_t old_mode, mo
     mode_t clear_mask;
     mode_t set_mask;
     if (clause.who_omitted) {
-      mode_t all_bits = who_set_mask(WHO_A, clause.perm_mask);
-      mode_t effective_bits = all_bits & ~update->creation_mask;
-      clear_mask = effective_bits;
-      set_mask = effective_bits;
+      mode_t affected_bits = who_clear_mask(WHO_A) & ~update->creation_mask;
+      mode_t requested_bits = who_set_mask(WHO_A, clause.perm_mask);
+
+      clear_mask = affected_bits;
+      set_mask = requested_bits & ~update->creation_mask;
     } else {
       clear_mask = who_clear_mask(clause.who_mask);
       set_mask = who_set_mask(clause.who_mask, clause.perm_mask);
@@ -372,6 +375,8 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
       compute_target_mode(mu, ent->fts_statp->st_mode, &new_mode);
       if (chmod_file(ent->fts_accpath, new_mode, flags) != CHMOD_OK) {
         if (!flags.force) ret = CHMOD_ERRNO;
+      } else if (flags.verbose) {
+        fprintf(stdout, "%s\n", ent->fts_path);
       }
       break;
     }
@@ -479,7 +484,7 @@ int main(int argc, char *argv[]) {
     chmod_result_e r = chmod_target(argv[i], &update, flags);
     switch (r) {
     case CHMOD_OK:
-      if (flags.verbose) fprintf(stdout, "%s\n", argv[i]);
+      if (flags.verbose && !flags.recurse) fprintf(stdout, "%s\n", argv[i]);
       break;
     case CHMOD_ERRNO:
       if (!flags.force) {
