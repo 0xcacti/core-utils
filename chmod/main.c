@@ -10,6 +10,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static const char *progname;
+
 typedef enum {
   SYMLINK_NONE, // -P
   SYMLINK_CMD,  // -H
@@ -391,6 +393,8 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
     case FTS_NS:
     case FTS_DC:
       if (!flags.force) ret = CHMOD_ERRNO;
+      error_errno(progname, ent->fts_path);
+
       break;
     }
   }
@@ -427,6 +431,7 @@ static chmod_result_e chmod_target(const char *file, mode_update_t *mu, flags_t 
 }
 
 int main(int argc, char *argv[]) {
+  progname = argv[0];
   int ch;
   flags_t flags = {0};
   flags.sym_mode = SYMLINK_NONE;
@@ -454,12 +459,12 @@ int main(int argc, char *argv[]) {
       flags.sym_mode = SYMLINK_ALL;
       break;
     default:
-      usage(argv[0]);
+      usage(progname);
     }
   }
 
   int num_args = argc - optind;
-  if (num_args < 2) usage(argv[0]);
+  if (num_args < 2) usage(progname);
 
   int ret = 0;
 
@@ -469,7 +474,7 @@ int main(int argc, char *argv[]) {
   chmod_result_e parse_result = parse_mode_update(argv[optind], &update);
   switch (parse_result) {
   case CHMOD_BAD_MODE:
-    error_msg(argv[0], "Invalid file mode", argv[optind]);
+    error_msg(progname, "Invalid file mode", argv[optind]);
     exit(2);
     break;
   case CHMOD_ERRNO:
@@ -487,8 +492,8 @@ int main(int argc, char *argv[]) {
       if (flags.verbose && !flags.recurse) fprintf(stdout, "%s\n", argv[i]);
       break;
     case CHMOD_ERRNO:
-      if (!flags.force) {
-        error_errno(argv[0], argv[i]);
+      if (!flags.force && !flags.recurse) {
+        error_errno(progname, argv[i]);
         ret = 1;
       }
       break;
