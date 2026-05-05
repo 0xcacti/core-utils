@@ -372,7 +372,8 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
   while ((ent = fts_read(fts)) != NULL) {
     switch (ent->fts_info) {
     case FTS_F:
-    case FTS_DP: {
+    case FTS_DP:
+    case FTS_DEFAULT: {
       mode_t new_mode;
       compute_target_mode(mu, ent->fts_statp->st_mode, &new_mode);
       if (chmod_file(ent->fts_accpath, new_mode, flags) != CHMOD_OK) {
@@ -392,8 +393,10 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
     case FTS_ERR:
     case FTS_NS:
     case FTS_DC:
-      if (!flags.force) ret = CHMOD_ERRNO;
-      error_errno(progname, ent->fts_path);
+      if (!flags.force) {
+        ret = CHMOD_ERRNO;
+        error_errno(progname, ent->fts_path);
+      }
 
       break;
     }
@@ -492,9 +495,9 @@ int main(int argc, char *argv[]) {
       if (flags.verbose && !flags.recurse) fprintf(stdout, "%s\n", argv[i]);
       break;
     case CHMOD_ERRNO:
+      ret = 1;
       if (!flags.force && !flags.recurse) {
         error_errno(progname, argv[i]);
-        ret = 1;
       }
       break;
     case CHMOD_BAD_MODE:
