@@ -21,7 +21,7 @@ typedef enum {
 typedef struct {
   bool force;     // -f
   bool no_follow; // -h
-  bool verbose;   // -v
+  int verbose;    // -v
   bool recurse;   // -R
   symlink_behavior_e sym_mode;
 } flags_t;
@@ -314,6 +314,27 @@ static mode_t who_set_mask(unsigned who_mask, unsigned perm_mask) {
   return mask;
 }
 
+static void mode_to_string(mode_t mode, char out[11]) {
+  out[0] = S_ISDIR(mode) ? 'd' : S_ISLNK(mode) ? 'l' : '-';
+
+  out[1] = (mode & 0400) != 0 ? 'r' : '-';
+  out[2] = (mode & 0200) != 0 ? 'w' : '-';
+  out[3] =
+      (mode & 04000) != 0 ? ((mode & 0100) != 0 ? 's' : 'S') : ((mode & 0100) != 0 ? 'x' : '-');
+
+  out[4] = (mode & 0040) != 0 ? 'r' : '-';
+  out[5] = (mode & 0020) != 0 ? 'w' : '-';
+  out[6] =
+      (mode & 02000) != 0 ? ((mode & 0010) != 0 ? 's' : 'S') : ((mode & 0010) != 0 ? 'x' : '-');
+
+  out[7] = (mode & 0004) != 0 ? 'r' : '-';
+  out[8] = (mode & 0002) != 0 ? 'w' : '-';
+  out[9] =
+      (mode & 01000) != 0 ? ((mode & 0001) != 0 ? 't' : 'T') : ((mode & 0001) != 0 ? 'x' : '-');
+
+  out[10] = '\0';
+}
+
 static void compute_target_mode(const mode_update_t *update, mode_t old_mode, bool is_dir,
                                 mode_t *out) {
   if (update->kind == MODE_OCTAL) {
@@ -410,7 +431,17 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
           ret = CHMOD_ERRNO;
           error_errno(progname, ent->fts_path);
         }
-      } else if (flags.verbose) {
+      } else if (flags.verbose > 1) {
+        char old_str[11];
+        char new_str[11];
+        mode_to_string(ent->fts_statp->st_mode, old_str);
+        mode_to_string((ent->fts_statp->st_mode & ~07777) | new_mode, new_str);
+
+        fprintf(stdout, "%s: %04o [%s] -> %04o [%s]\n", ent->fts_path,
+                (unsigned)(ent->fts_statp->st_mode & 07777), old_str, (unsigned)(new_mode & 07777),
+                new_str);
+
+      } else if (flags.verbose > 0) {
         fprintf(stdout, "%s\n", ent->fts_path);
       }
       break;
@@ -465,7 +496,20 @@ static chmod_result_e chmod_target(const char *file, mode_update_t *mu, flags_t 
   }
 
   compute_target_mode(mu, st.st_mode, S_ISDIR(st.st_mode), &new_mode);
-  return chmod_file(file, new_mode, flags, S_ISLNK(st.st_mode));
+  chmod_result_e res = chmod_file(file, new_mode, flags, S_ISLNK(st.st_mode));
+  if (res == CHMOD_OK && flags.verbose > 0) {
+    if (flags.verbose > 1) {
+      char old_str[11];
+      char new_str[11];
+      mode_to_string(st.st_mode, old_str);
+      mode_to_string((st.st_mode & ~07777) | new_mode, new_str);
+      fprintf(stdout, "%s: %04o [%s] -> %04o [%s]\n", file, (unsigned)(st.st_mode & 07777), old_str,
+              (unsigned)(new_mode & 07777), new_str);
+    } else if (!flags.recurse) {
+      fprintf(stdout, "%s\n", file);
+    }
+  }
+  return res;
 }
 
 int main(int argc, char *argv[]) {
@@ -482,7 +526,7 @@ int main(int argc, char *argv[]) {
       flags.no_follow = true;
       break;
     case 'v':
-      flags.verbose = true;
+      flags.verbose++;
       break;
     case 'R':
       flags.recurse = true;
@@ -527,7 +571,6 @@ int main(int argc, char *argv[]) {
     chmod_result_e r = chmod_target(argv[i], &update, flags);
     switch (r) {
     case CHMOD_OK:
-      if (flags.verbose && !flags.recurse) fprintf(stdout, "%s\n", argv[i]);
       break;
     case CHMOD_ERRNO:
       if (!flags.force) {
