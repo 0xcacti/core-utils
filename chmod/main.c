@@ -337,8 +337,9 @@ static void compute_target_mode(const mode_update_t *update, mode_t old_mode, mo
   *out = new_mode;
 }
 
-static chmod_result_e chmod_file(const char *file, mode_t new_mode, flags_t flags) {
-  if (flags.no_follow) {
+static chmod_result_e chmod_file(const char *file, mode_t new_mode, flags_t flags,
+                                 bool is_symlink) {
+  if (flags.no_follow && is_symlink) {
     if (lchmod(file, new_mode) < 0) return CHMOD_ERRNO;
   } else {
     if (chmod(file, new_mode) < 0) return CHMOD_ERRNO;
@@ -376,7 +377,8 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
     case FTS_DEFAULT: {
       mode_t new_mode;
       compute_target_mode(mu, ent->fts_statp->st_mode, &new_mode);
-      if (chmod_file(ent->fts_accpath, new_mode, flags) != CHMOD_OK) {
+      if (chmod_file(ent->fts_accpath, new_mode, flags, S_ISLNK(ent->fts_statp->st_mode)) !=
+          CHMOD_OK) {
         if (!flags.force) ret = CHMOD_ERRNO;
       } else if (flags.verbose) {
         fprintf(stdout, "%s\n", ent->fts_path);
@@ -402,7 +404,10 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
     }
   }
 
-  if (fts_close(fts) < 0 && !flags.force) return CHMOD_ERRNO;
+  if (fts_close(fts) < 0) {
+    if (!flags.force) error_errno(progname, file);
+    return CHMOD_ERRNO;
+  }
   return ret;
 }
 
@@ -430,7 +435,7 @@ static chmod_result_e chmod_target(const char *file, mode_update_t *mu, flags_t 
   }
 
   compute_target_mode(mu, st.st_mode, &new_mode);
-  return chmod_file(file, new_mode, flags);
+  return chmod_file(file, new_mode, flags, S_ISLNK(st.st_mode));
 }
 
 int main(int argc, char *argv[]) {
