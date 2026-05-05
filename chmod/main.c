@@ -49,6 +49,9 @@ enum {
   PERM_R = 1 << 0,
   PERM_W = 1 << 1,
   PERM_X = 1 << 2,
+  PERM_S = 1 << 3,
+  PERM_T = 1 << 4,
+  PERM_CAP_X = 1 << 5,
 };
 
 typedef struct {
@@ -194,9 +197,11 @@ static int parse_perm(const char **mode_str, unsigned *out, bool allow_empty) {
   const char *s = *mode_str;
   unsigned perm = 0;
 
-  if (!allow_empty && *s != 'r' && *s != 'w' && *s != 'x') return -1;
+  if (!allow_empty && *s != 'r' && *s != 'w' && *s != 'x' && *s != 'X' && *s != 's' && *s != 't') {
+    return -1;
+  }
 
-  while (*s == 'r' || *s == 'w' || *s == 'x') {
+  while (*s == 'r' || *s == 'w' || *s == 'x' || *s == 'X' || *s == 's' || *s == 't') {
     switch (*s) {
     case 'r':
       perm |= PERM_R;
@@ -206,6 +211,15 @@ static int parse_perm(const char **mode_str, unsigned *out, bool allow_empty) {
       break;
     case 'x':
       perm |= PERM_X;
+      break;
+    case 's':
+      perm |= PERM_S;
+      break;
+    case 't':
+      perm |= PERM_T;
+      break;
+    case 'X':
+      perm |= PERM_CAP_X;
       break;
     }
     s++;
@@ -268,9 +282,9 @@ static chmod_result_e parse_mode_update(const char *mode_str, mode_update_t *out
 
 static mode_t who_clear_mask(unsigned who_mask) {
   mode_t mask = 0;
-  if ((who_mask & WHO_U) != 0) mask |= 0700;
-  if ((who_mask & WHO_G) != 0) mask |= 0070;
-  if ((who_mask & WHO_O) != 0) mask |= 0007;
+  if ((who_mask & WHO_U) != 0) mask |= 0700 | 04000;
+  if ((who_mask & WHO_G) != 0) mask |= 0070 | 02000;
+  if ((who_mask & WHO_O) != 0) mask |= 0007 | 01000;
   return mask;
 }
 
@@ -280,24 +294,28 @@ static mode_t who_set_mask(unsigned who_mask, unsigned perm_mask) {
     if ((perm_mask & PERM_R) != 0) mask |= 0400;
     if ((perm_mask & PERM_W) != 0) mask |= 0200;
     if ((perm_mask & PERM_X) != 0) mask |= 0100;
+    if ((perm_mask & PERM_S) != 0) mask |= 04000;
   }
 
   if ((who_mask & WHO_G) != 0) {
     if ((perm_mask & PERM_R) != 0) mask |= 0040;
     if ((perm_mask & PERM_W) != 0) mask |= 0020;
     if ((perm_mask & PERM_X) != 0) mask |= 0010;
+    if ((perm_mask & PERM_S) != 0) mask |= 02000;
   }
 
   if ((who_mask & WHO_O) != 0) {
     if ((perm_mask & PERM_R) != 0) mask |= 0004;
     if ((perm_mask & PERM_W) != 0) mask |= 0002;
     if ((perm_mask & PERM_X) != 0) mask |= 0001;
+    if ((perm_mask & PERM_T) != 0) mask |= 01000;
   }
 
   return mask;
 }
 
-static void compute_target_mode(const mode_update_t *update, mode_t old_mode, mode_t *out) {
+static void compute_target_mode(const mode_update_t *update, mode_t old_mode, bool is_dir,
+                                mode_t *out) {
   if (update->kind == MODE_OCTAL) {
     *out = update->octal_mode;
     return;
@@ -308,17 +326,26 @@ static void compute_target_mode(const mode_update_t *update, mode_t old_mode, mo
   for (size_t i = 0; i < update->clause_count; i++) {
     symbolic_clause_t clause = update->clauses[i];
 
+    unsigned perm_mask = clause.perm_mask;
+
+    if ((perm_mask & PERM_CAP_X) != 0) {
+      perm_mask &= ~PERM_CAP_X;
+      if (is_dir || (old_mode & 0111) != 0) {
+        perm_mask |= PERM_X;
+      }
+    }
+
     mode_t clear_mask;
     mode_t set_mask;
     if (clause.who_omitted) {
       mode_t affected_bits = who_clear_mask(WHO_A) & ~update->creation_mask;
-      mode_t requested_bits = who_set_mask(WHO_A, clause.perm_mask);
+      mode_t requested_bits = who_set_mask(WHO_A, perm_mask);
 
       clear_mask = affected_bits;
       set_mask = requested_bits & ~update->creation_mask;
     } else {
       clear_mask = who_clear_mask(clause.who_mask);
-      set_mask = who_set_mask(clause.who_mask, clause.perm_mask);
+      set_mask = who_set_mask(clause.who_mask, perm_mask);
     }
 
     switch (clause.op) {
@@ -376,10 +403,13 @@ static chmod_result_e chmod_dir(const char *file, mode_update_t *mu, flags_t fla
     case FTS_DP:
     case FTS_DEFAULT: {
       mode_t new_mode;
-      compute_target_mode(mu, ent->fts_statp->st_mode, &new_mode);
+      compute_target_mode(mu, ent->fts_statp->st_mode, S_ISDIR(ent->fts_statp->st_mode), &new_mode);
       if (chmod_file(ent->fts_accpath, new_mode, flags, S_ISLNK(ent->fts_statp->st_mode)) !=
           CHMOD_OK) {
-        if (!flags.force) ret = CHMOD_ERRNO;
+        if (!flags.force) {
+          ret = CHMOD_ERRNO;
+          error_errno(progname, ent->fts_path);
+        }
       } else if (flags.verbose) {
         fprintf(stdout, "%s\n", ent->fts_path);
       }
@@ -434,7 +464,7 @@ static chmod_result_e chmod_target(const char *file, mode_update_t *mu, flags_t 
     }
   }
 
-  compute_target_mode(mu, st.st_mode, &new_mode);
+  compute_target_mode(mu, st.st_mode, S_ISDIR(st.st_mode), &new_mode);
   return chmod_file(file, new_mode, flags, S_ISLNK(st.st_mode));
 }
 
@@ -500,9 +530,11 @@ int main(int argc, char *argv[]) {
       if (flags.verbose && !flags.recurse) fprintf(stdout, "%s\n", argv[i]);
       break;
     case CHMOD_ERRNO:
-      ret = 1;
-      if (!flags.force && !flags.recurse) {
-        error_errno(progname, argv[i]);
+      if (!flags.force) {
+        ret = 1;
+        if (!flags.recurse) {
+          error_errno(progname, argv[i]);
+        }
       }
       break;
     case CHMOD_BAD_MODE:
