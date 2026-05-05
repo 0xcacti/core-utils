@@ -52,7 +52,4 @@ set of coreutils to maximize my learning value.
 - [x] mv
 - [x] ln
 - [x] chmod
-- [ ] find
-- [ ] tar
-- [ ] xargs 
 
