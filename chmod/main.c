@@ -52,6 +52,9 @@ enum {
   PERM_S = 1 << 3,
   PERM_T = 1 << 4,
   PERM_CAP_X = 1 << 5,
+  PERM_COPY_U = 1 << 6,
+  PERM_COPY_G = 1 << 7,
+  PERM_COPY_O = 1 << 8,
 };
 
 typedef struct {
@@ -193,15 +196,20 @@ static int parse_op(const char **mode_str, symbolic_op_e *out) {
   return 0;
 }
 
+static bool is_perm_char(char c) {
+  return c == 'r' || c == 'w' || c == 'x' || c == 'X' || c == 's' || c == 't' || c == 'u' ||
+         c == 'g' || c == 'o';
+}
+
 static int parse_perm(const char **mode_str, unsigned *out, bool allow_empty) {
   const char *s = *mode_str;
   unsigned perm = 0;
 
-  if (!allow_empty && *s != 'r' && *s != 'w' && *s != 'x' && *s != 'X' && *s != 's' && *s != 't') {
+  if (!allow_empty && !is_perm_char(*s)) {
     return -1;
   }
 
-  while (*s == 'r' || *s == 'w' || *s == 'x' || *s == 'X' || *s == 's' || *s == 't') {
+  while (is_perm_char(*s)) {
     switch (*s) {
     case 'r':
       perm |= PERM_R;
@@ -220,6 +228,15 @@ static int parse_perm(const char **mode_str, unsigned *out, bool allow_empty) {
       break;
     case 'X':
       perm |= PERM_CAP_X;
+      break;
+    case 'u':
+      perm |= PERM_COPY_U;
+      break;
+    case 'g':
+      perm |= PERM_COPY_G;
+      break;
+    case 'o':
+      perm |= PERM_COPY_O;
       break;
     }
     s++;
@@ -314,8 +331,36 @@ static mode_t who_set_mask(unsigned who_mask, unsigned perm_mask) {
   return mask;
 }
 
+static unsigned copy_perm_mask_from_mode(mode_t mode, unsigned who_mask) {
+  unsigned perm = 0;
+  if ((who_mask & WHO_U) != 0) {
+    if ((mode & 0400) != 0) perm |= PERM_R;
+    if ((mode & 0200) != 0) perm |= PERM_W;
+    if ((mode & 0100) != 0) perm |= PERM_X;
+  }
+  if ((who_mask & WHO_G) != 0) {
+    if ((mode & 0040) != 0) perm |= PERM_R;
+    if ((mode & 0020) != 0) perm |= PERM_W;
+    if ((mode & 0010) != 0) perm |= PERM_X;
+  }
+
+  if ((who_mask & WHO_O) != 0) {
+    if ((mode & 0004) != 0) perm |= PERM_R;
+    if ((mode & 0002) != 0) perm |= PERM_W;
+    if ((mode & 0001) != 0) perm |= PERM_X;
+  }
+
+  return perm;
+}
+
 static void mode_to_string(mode_t mode, char out[11]) {
-  out[0] = S_ISDIR(mode) ? 'd' : S_ISLNK(mode) ? 'l' : '-';
+  out[0] = S_ISDIR(mode)    ? 'd'
+           : S_ISLNK(mode)  ? 'l'
+           : S_ISCHR(mode)  ? 'c'
+           : S_ISBLK(mode)  ? 'b'
+           : S_ISFIFO(mode) ? 'p'
+           : S_ISSOCK(mode) ? 's'
+                            : '-';
 
   out[1] = (mode & 0400) != 0 ? 'r' : '-';
   out[2] = (mode & 0200) != 0 ? 'w' : '-';
@@ -354,6 +399,21 @@ static void compute_target_mode(const mode_update_t *update, mode_t old_mode, bo
       if (is_dir || (old_mode & 0111) != 0) {
         perm_mask |= PERM_X;
       }
+    }
+
+    if ((perm_mask & PERM_COPY_U) != 0) {
+      perm_mask &= ~PERM_COPY_U;
+      perm_mask |= copy_perm_mask_from_mode(new_mode, WHO_U);
+    }
+
+    if ((perm_mask & PERM_COPY_G) != 0) {
+      perm_mask &= ~PERM_COPY_G;
+      perm_mask |= copy_perm_mask_from_mode(new_mode, WHO_G);
+    }
+
+    if ((perm_mask & PERM_COPY_O) != 0) {
+      perm_mask &= ~PERM_COPY_O;
+      perm_mask |= copy_perm_mask_from_mode(new_mode, WHO_O);
     }
 
     mode_t clear_mask;
